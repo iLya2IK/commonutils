@@ -44,7 +44,7 @@ Type
     constructor Create(AOwner: TComponent); override;
     Destructor Destroy; override;
     Procedure Terminate; override;
-    Procedure UpdateResponse(AResponse : TResponse); override;
+    Procedure UpdateResponse({%H-}AResponse : TResponse); override;
     Procedure InitSession(ARequest : TRequest; OnNewSession, OnExpired: TNotifyEvent); override;
     Procedure InitResponse(AResponse : TResponse); override;
     Procedure RemoveVariable(VariableName : String); override;
@@ -76,7 +76,7 @@ Type
     Procedure DeleteSessionRecord(const ARecordName : String);virtual;
     Function SessionExpired(const ARecordName : String) : boolean;
     Function SessionExists(const ARecordName : String) : boolean;
-    Function DoCreateSession(ARequest : TRequest) : TCustomSession; override;
+    Function DoCreateSession({%H-}ARequest : TRequest) : TCustomSession; override;
     // Delete expired records.
     procedure DoCleanupSessions; override;
     Procedure DoDoneSession(Var ASession : TCustomSession); override;
@@ -191,7 +191,7 @@ begin
   Result:=not SameStr(S, '0');
 end;
 
-function TSqliteSessionFactory.DoCreateSession(ARequest: TRequest): TCustomSession;
+function TSqliteSessionFactory.DoCreateSession({%H-}ARequest: TRequest): TCustomSession;
 Var
   S : TSqliteWebSession;
 begin
@@ -283,7 +283,7 @@ begin
   RemoveFromSessionState(ssExpired);
 end;
 
-procedure TSqliteWebSession.UpdateResponse(AResponse: TResponse);
+procedure TSqliteWebSession.UpdateResponse({%H-}AResponse: TResponse);
 begin
   //
 end;

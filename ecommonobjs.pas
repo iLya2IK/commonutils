@@ -401,7 +401,7 @@ function TThreadSafeFastList.Add(const Obj: TObject): Integer;
 begin
   Lock;
   try
-    FList.Add(Obj);
+    Result := FList.Add(Obj);
   finally
     UnLock;
   end;

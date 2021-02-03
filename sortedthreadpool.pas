@@ -82,8 +82,8 @@ type
     function GetSortedJobsCount: Integer;
     function GetSortedThreadsCount: integer;
     function GetThreadsCount: integer;
-    procedure ResizePool(aSortedThreads: Integer;
-                         aLinearThreads: Integer);
+    procedure ResizePool({%H-}aSortedThreads: Integer;
+                         {%H-}aLinearThreads: Integer);
     procedure SetLinearThreadsCount(AValue: integer);
     procedure SetRunning(AValue: Boolean);
     procedure SetSortedThreadsCount(AValue: integer);
@@ -161,8 +161,8 @@ begin
   Result := SortedThreadsCount + LinearThreadsCount;
 end;
 
-procedure TSortedThreadPool.ResizePool(aSortedThreads: Integer;
-  aLinearThreads: Integer);
+procedure TSortedThreadPool.ResizePool({%H-}aSortedThreads: Integer;
+  {%H-}aLinearThreads: Integer);
 begin
   //TODO: resize pool here
 end;

@@ -192,7 +192,8 @@ begin
   end;
 end;
 
-function GetAutoIncValue(NextValue: Pointer; Columns: Integer; ColumnValues: PPAnsiChar; ColumnNames: PPAnsiChar): Integer; cdecl;
+function GetAutoIncValue(NextValue: Pointer; {%H-}Columns: Integer;
+  ColumnValues: PPAnsiChar; {%H-}ColumnNames: PPAnsiChar): Integer; cdecl;
 var
   CodeError, TempInt: Integer;
 begin
