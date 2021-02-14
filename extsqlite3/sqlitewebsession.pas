@@ -35,6 +35,7 @@ Type
     FSqliteFactory : TSqliteSessionFactory;
   Protected
     procedure CreateRecord(Const AFN : String);
+    procedure CreateRecordIfNotExists(Const AFN : String);
     Procedure RemoveRecord;
     Procedure CheckSession;
     Function GetSessionID : String; override;
@@ -60,6 +61,7 @@ Type
   TSqliteSessionFactory = Class(TSessionFactory)
   private
     PREP_AddNewClient,
+      PREP_AddNewClientIfNotExists,
       PREP_GetClientExpired,
       PREP_GetClientExists,
       PREP_DoCleanUp,
@@ -133,6 +135,7 @@ begin
      'data text);');
 
   PREP_AddNewClient := aDB.AddNewPrep('INSERT INTO clients (id, timeout) values(?1, ?2);');
+  PREP_AddNewClientIfNotExists := aDB.AddNewPrep('INSERT or ignore INTO clients (id, timeout) values(?1, ?2);');
   PREP_GetClientExpired := aDB.AddNewPrep('select count(*) from clients where (id = ?1) and (julianday(current_timestamp)-julianday(last)) * 1440.0 > timeout;');
   PREP_GetClientExists := aDB.AddNewPrep('select count(*) from clients where (id = ?1);');
   PREP_DoCleanUp := aDB.AddNewPrep('delete from clients where (julianday(current_timestamp)-julianday(last)) * 1440.0 > timeout;');
@@ -236,6 +239,13 @@ begin
      FSqliteFactory.PREP_AddNewClient.Execute([AFN, TimeOutMinutes]);
 end;
 
+procedure TSqliteWebSession.CreateRecordIfNotExists(const AFN: String);
+begin
+  FSqliteFactory := TSqliteSessionFactory(SessionFactory);
+  if assigned(FSqliteFactory) then
+     FSqliteFactory.PREP_AddNewClientIfNotExists.Execute([AFN, TimeOutMinutes]);
+end;
+
 procedure TSqliteWebSession.RemoveRecord;
 begin
   if assigned(FSqliteFactory) then
@@ -317,16 +327,14 @@ begin
       RemoveRecord;
     end;
     FSID:=S;
-    if (not FSqliteFactory.SessionExists(S)) then
-       CreateRecord(S);
+    CreateRecordIfNotExists(S);
   end else
   begin
     AddToSessionState(ssNew);
     GetSessionID;
     S:=SessionID;
 {$ifdef cgidebug}SendDebug('Expired or new session. Creating new Ini file : '+S);{$endif}
-    if (not FSqliteFactory.SessionExists(S)) then
-       CreateRecord(S);
+    CreateRecordIfNotExists(S);
     FSessionStarted:=True;
     If Assigned(OnNewSession) then
       OnNewSession(Self);

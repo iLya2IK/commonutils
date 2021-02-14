@@ -42,6 +42,39 @@ type
 
   TPoolThreadKind = (ptkLinear, ptkSorted);
 
+  { TThreadPoolThreadKind }
+
+  TThreadPoolThreadKind = class(TNetCustomLockedObject)
+  private
+    FValue : TPoolThreadKind;
+    function GetValue: TPoolThreadKind;
+    procedure SetValue(AValue: TPoolThreadKind);
+  public
+    constructor Create(AValue : TPoolThreadKind);
+    property Value : TPoolThreadKind read GetValue write SetValue;
+  end;
+
+  TJobToJobWait = record
+    DefaultValue : Integer;
+    AdaptMin : Word;
+    AdaptMax : Word;
+  end;
+
+  { TThreadJobToJobWait }
+
+  TThreadJobToJobWait = class(TNetCustomLockedObject)
+  private
+    FValue : TJobToJobWait;
+    function GetValue: TJobToJobWait;
+    procedure SetValue(AValue: TJobToJobWait);
+  public
+    constructor Create(AValue : TJobToJobWait);
+    procedure AdaptToDec(var AValue : Integer);
+    procedure AdaptToInc(var AValue : Integer);
+    function IsEqual(AValue : TJobToJobWait) : Boolean;
+    property Value : TJobToJobWait read GetValue write SetValue;
+  end;
+
   { TSortedCustomThread }
 
   TSortedCustomThread = class(TThread)
@@ -49,17 +82,25 @@ type
     FOwner: TSortedThreadPool;
     FRunning: TThreadBoolean;
     FJob : TLinearJob;
-    FThreadKind : TPoolThreadKind;
+    FThreadKind : TThreadPoolThreadKind;
+    FSleepTime : TThreadJobToJobWait;
+    FCurSleepTime : Integer;
     function GetRunning: Boolean;
+    function GetSleepTime: TJobToJobWait;
+    function GetThreadKind: TPoolThreadKind;
+    procedure SetSleepTime(AValue: TJobToJobWait);
+    procedure SetThreadKind(AValue: TPoolThreadKind);
   public
     procedure Execute; override;
-    constructor Create(AOwner: TSortedThreadPool; AKind : TPoolThreadKind);
+    constructor Create(AOwner: TSortedThreadPool;
+                               AKind : TPoolThreadKind;
+                               aSleepTime : TJobToJobWait);
     destructor Destroy; override;
     property Running: Boolean read GetRunning;
     property myJob : TLinearJob read FJob write FJob;
+    property ThreadKind : TPoolThreadKind read GetThreadKind write SetThreadKind;
+    property SleepTime : TJobToJobWait read GetSleepTime write SetSleepTime;
   end;
-
-  { TThreadPool }
 
   { TSortedThreadPool }
 
@@ -71,6 +112,7 @@ type
     FLinearList : TThreadSafeFastSeq;
     FSortedThreadsCount : TThreadInteger;
     FLinearThreadsCount : TThreadInteger;
+    FThreadJobToJobWait : TThreadJobToJobWait;
     FRunning: TThreadBoolean;
     function GetLinearJobsCount: Integer;
     function GetLinearThreadsCount: integer;
@@ -81,16 +123,19 @@ type
     function GetLinearJob : TLinearJob;
     function GetSortedJobsCount: Integer;
     function GetSortedThreadsCount: integer;
+    function GetThreadJobToJobWait: TJobToJobWait;
     function GetThreadsCount: integer;
     procedure ResizePool({%H-}aSortedThreads: Integer;
                          {%H-}aLinearThreads: Integer);
     procedure SetLinearThreadsCount(AValue: integer);
     procedure SetRunning(AValue: Boolean);
     procedure SetSortedThreadsCount(AValue: integer);
+    procedure SetThreadJobToJobWait(AValue: TJobToJobWait);
   public
     constructor Create(const OnCompareMethod: TAvgLvlObjectSortCompare;
-                                               aSortedThreads: Integer = 5;
-                                               aLinearThreads: Integer = 5);
+                               aSleepTime : TJobToJobWait;
+                               aSortedThreads: Integer = 5;
+                               aLinearThreads: Integer = 5);
     destructor Destroy; override;
     procedure AddSorted(AJob : TSortedJob);
     procedure AddLinear(AJob : TLinearJob);
@@ -100,16 +145,123 @@ type
     property LinearJobsCount: Integer read GetLinearJobsCount;
     //
     property ThreadsCount : integer read GetThreadsCount;
+    property ThreadJobToJobWait : TJobToJobWait read GetThreadJobToJobWait
+                                          write SetThreadJobToJobWait;
     property SortedThreadsCount : integer read GetSortedThreadsCount
                                           write SetSortedThreadsCount;
     property LinearThreadsCount : integer read GetLinearThreadsCount
                                           write SetLinearThreadsCount;
   end;
 
+const
+  SORTED_DEFAULT_SLEEP_TIME = 5;
+
+const DefaultJobToJobWait : TJobToJobWait = (DefaultValue : SORTED_DEFAULT_SLEEP_TIME;
+                                             AdaptMin : 0;
+                                             AdaptMax : 0);
+
 implementation
 
-const
-  SORTED_SLEEP_TIME = 20;
+{ TThreadJobToJobWait }
+
+function TThreadJobToJobWait.GetValue: TJobToJobWait;
+begin
+  Lock;
+  try
+    Result := FValue;
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TThreadJobToJobWait.SetValue(AValue: TJobToJobWait);
+begin
+  Lock;
+  try
+    FValue := AValue;
+  finally
+    UnLock;
+  end;
+end;
+
+constructor TThreadJobToJobWait.Create(AValue: TJobToJobWait);
+begin
+  inherited Create;
+  if AValue.DefaultValue < 0 then AValue.DefaultValue:= SORTED_DEFAULT_SLEEP_TIME;
+  FValue := AValue;
+end;
+
+procedure TThreadJobToJobWait.AdaptToDec(var AValue: Integer);
+begin
+  Lock;
+  try
+    if FValue.AdaptMax >
+       FValue.AdaptMin then
+    begin
+      AValue := AValue shr 1;
+      if AValue < FValue.AdaptMin then
+         AValue := FValue.AdaptMin;
+    end;
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TThreadJobToJobWait.AdaptToInc(var AValue: Integer);
+begin
+  Lock;
+  try
+    if FValue.AdaptMax >
+       FValue.AdaptMin then
+    begin
+      AValue := AValue shl 1;
+      if AValue > FValue.AdaptMax then
+         AValue := FValue.AdaptMax;
+    end;
+  finally
+    UnLock;
+  end;
+end;
+
+function TThreadJobToJobWait.IsEqual(AValue: TJobToJobWait): Boolean;
+begin
+  Lock;
+  try
+    Result := (FValue.DefaultValue = AValue.DefaultValue) and
+              (FValue.AdaptMax = AValue.AdaptMax) and
+              (FValue.AdaptMin = AValue.AdaptMin);
+  finally
+    UnLock;
+  end;
+end;
+
+{ TThreadPoolThreadKind }
+
+function TThreadPoolThreadKind.GetValue: TPoolThreadKind;
+begin
+  Lock;
+  try
+    Result := FValue;
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TThreadPoolThreadKind.SetValue(AValue: TPoolThreadKind);
+begin
+  Lock;
+  try
+    FValue:= AValue;
+  finally
+    UnLock;
+  end;
+end;
+
+constructor TThreadPoolThreadKind.Create(AValue: TPoolThreadKind);
+begin
+  inherited Create;
+  FValue:= AValue;
+end;
 
 { TSortedJob }
 
@@ -156,15 +308,82 @@ begin
   Result := FSortedThreadsCount.Value;
 end;
 
+function TSortedThreadPool.GetThreadJobToJobWait: TJobToJobWait;
+begin
+  Result := FThreadJobToJobWait.Value;
+end;
+
 function TSortedThreadPool.GetThreadsCount: integer;
 begin
   Result := SortedThreadsCount + LinearThreadsCount;
 end;
 
-procedure TSortedThreadPool.ResizePool({%H-}aSortedThreads: Integer;
-  {%H-}aLinearThreads: Integer);
+procedure TSortedThreadPool.ResizePool(aSortedThreads: Integer;
+                                       aLinearThreads: Integer);
+var MSC, MLC, i, j : Integer;
+    AThread : TSortedCustomThread;
+    FT : TJobToJobWait;
 begin
-  //TODO: resize pool here
+  MSC := FSortedThreadsCount.Value;
+  MLC := FLinearThreadsCount.Value;
+  FPool.Lock;
+  try
+    for i := 0 to FPool.Count-1 do
+    begin
+      if assigned(FPool[i]) then
+      begin
+        AThread := TSortedCustomThread(FPool[i]);
+        if AThread.ThreadKind = ptkLinear then
+        begin
+          if MLC > aLinearThreads then begin
+            //need to remove this linear thread
+            //or requalificate it to sorted
+            if (MSC < aSortedThreads) then
+            begin
+              Inc(MSC);
+              AThread.ThreadKind := ptkSorted;
+            end else
+              AThread.Terminate;
+            Dec(MLC);
+          end;
+        end else
+        begin
+          if MSC > aSortedThreads then begin
+            //need to remove this sorted thread
+            //or requalificate it to linear
+            if (MSC < aSortedThreads) then
+            begin
+              Inc(MLC);
+              AThread.ThreadKind := ptkLinear;
+            end else
+              AThread.Terminate;
+            Dec(MSC);
+          end;
+        end;
+      end;
+    end;
+    FT := ThreadJobToJobWait;
+    for i := MLC to aLinearThreads-1 do
+    begin
+      AThread := TSortedCustomThread.Create(Self, ptkLinear, FT);
+      j := FPool.IndexOf(nil);
+      if j >= 0 then
+        FPool[j] := AThread else
+        FPool.Add(AThread);
+    end;
+    for i := MSC to aSortedThreads-1 do
+    begin
+      AThread := TSortedCustomThread.Create(Self, ptkSorted, FT);
+      j := FPool.IndexOf(nil);
+      if j >= 0 then
+        FPool[j] := AThread else
+        FPool.Add(AThread);
+    end;
+    FSortedThreadsCount.Value := aSortedThreads;
+    FLinearThreadsCount.Value := aLinearThreads;
+  finally
+    FPool.UnLock;
+  end;
 end;
 
 procedure TSortedThreadPool.SetLinearThreadsCount(AValue: integer);
@@ -180,6 +399,25 @@ end;
 procedure TSortedThreadPool.SetSortedThreadsCount(AValue: integer);
 begin
   ResizePool(AValue, FLinearThreadsCount.Value);
+end;
+
+procedure TSortedThreadPool.SetThreadJobToJobWait(AValue: TJobToJobWait);
+var i : integer;
+begin
+  if AValue.DefaultValue < 0 then AValue.DefaultValue := SORTED_DEFAULT_SLEEP_TIME;
+  if not FThreadJobToJobWait.IsEqual(AValue) then
+  begin
+    FThreadJobToJobWait.Value := AValue;
+
+    FPool.Lock;
+    try
+      for i := 0 to FPool.Count-1 do
+        if assigned(FPool[i]) then
+          TSortedCustomThread(FPool[i]).SleepTime := AValue;
+    finally
+      FPool.UnLock;
+    end;
+  end;
 end;
 
 function TSortedThreadPool.GetLinearJobsCount: Integer;
@@ -220,7 +458,11 @@ begin
   try
     for i := 0 to FPool.Count - 1 do
     begin
-      if (FPool[i] = aThread) then FPool[i] := nil;
+      if (FPool[i] = aThread) then begin
+        if aThread.ThreadKind = ptkLinear then FLinearThreadsCount.DecValue else
+        if aThread.ThreadKind = ptkSorted then FSortedThreadsCount.DecValue;
+        FPool[i] := nil;
+      end;
     end;
   finally
     FPool.UnLock;
@@ -228,10 +470,13 @@ begin
 end;
 
 constructor TSortedThreadPool.Create(
-  const OnCompareMethod: TAvgLvlObjectSortCompare; aSortedThreads: Integer;
+  const OnCompareMethod: TAvgLvlObjectSortCompare;
+  aSleepTime: TJobToJobWait;
+  aSortedThreads: Integer;
   aLinearThreads: Integer);
 var
   i, FThreads: Integer;
+  FT : TJobToJobWait;
 begin
   FPool:= TThreadSafeFastList.Create;
   FSortedList := TAvgLvlTree.CreateObjectCompare(OnCompareMethod);
@@ -240,6 +485,9 @@ begin
   FLinearList := TThreadSafeFastSeq.Create;
   FSortedThreadsCount := TThreadInteger.Create(aSortedThreads);
   FLinearThreadsCount := TThreadInteger.Create(aLinearThreads);
+  FThreadJobToJobWait := TThreadJobToJobWait.Create(DefaultJobToJobWait);
+  ThreadJobToJobWait := aSleepTime;
+  FT := ThreadJobToJobWait;
   FRunning:= TThreadBoolean.Create(false);
   FThreads := aSortedThreads + aLinearThreads;
 
@@ -247,9 +495,9 @@ begin
   try
     for i := 1 to FThreads do begin
       if i <= aLinearThreads then
-       FPool.Add(TSortedCustomThread.Create(Self, ptkLinear)) else
-       FPool.Add(TSortedCustomThread.Create(Self, ptkSorted));
-      Sleep(SORTED_SLEEP_TIME div FThreads);
+       FPool.Add(TSortedCustomThread.Create(Self, ptkLinear, FT)) else
+       FPool.Add(TSortedCustomThread.Create(Self, ptkSorted, FT));
+      Sleep(FT.DefaultValue div FThreads);
     end;
   finally
     FPool.UnLock;
@@ -309,6 +557,7 @@ begin
   FRunning.Free;
   FLinearThreadsCount.Free;
   FSortedThreadsCount.Free;
+  FThreadJobToJobWait.Free;
 
   inherited Destroy;
 end;
@@ -345,6 +594,26 @@ begin
   Result := FRunning.Value;
 end;
 
+function TSortedCustomThread.GetSleepTime: TJobToJobWait;
+begin
+  Result := FSleepTime.Value;
+end;
+
+function TSortedCustomThread.GetThreadKind: TPoolThreadKind;
+begin
+  Result := FThreadKind.Value;
+end;
+
+procedure TSortedCustomThread.SetSleepTime(AValue: TJobToJobWait);
+begin
+  FSleepTime.Value := AValue;
+end;
+
+procedure TSortedCustomThread.SetThreadKind(AValue: TPoolThreadKind);
+begin
+  FThreadKind.Value := AValue;
+end;
+
 procedure TSortedCustomThread.Execute;
 var
   j: TLinearJob;
@@ -353,7 +622,7 @@ begin
   begin
     if FOwner.Running then
     begin
-      case FThreadKind of
+      case ThreadKind of
         ptkLinear:  j := FOwner.GetLinearJob;
         ptkSorted:  j := FOwner.GetSortedJob;
       else
@@ -374,20 +643,22 @@ begin
           myJob := nil;
           j.Free;
         end;
-      end
-      else
-        FRunning.Value := False;
+        FSleepTime.AdaptToDec(FCurSleepTime);
+      end else
+        FSleepTime.AdaptToInc(FCurSleepTime);
     end;
-    Sleep(SORTED_SLEEP_TIME);
+    Sleep(FCurSleepTime);
   end;
 end;
 
 constructor TSortedCustomThread.Create(AOwner: TSortedThreadPool;
-  AKind: TPoolThreadKind);
+  AKind: TPoolThreadKind; aSleepTime: TJobToJobWait);
 begin
   FOwner := AOwner;
-  FThreadKind:= AKind;
   FRunning := TThreadBoolean.Create(False);
+  FSleepTime:= TThreadJobToJobWait.Create(aSleepTime);
+  FCurSleepTime := aSleepTime.DefaultValue;
+  FThreadKind := TThreadPoolThreadKind.Create(AKind);
   inherited Create(False);
   FreeOnTerminate := true;
 end;
@@ -396,6 +667,8 @@ destructor TSortedCustomThread.Destroy;
 begin
   FOwner.ExcludeThread(Self);
   FreeAndNil(FRunning);
+  FreeAndNil(FThreadKind);
+  FreeAndNil(FSleepTime);
   inherited Destroy;
 end;
 
