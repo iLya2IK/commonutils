@@ -764,7 +764,6 @@ begin
   if not Assigned(loc) then
      Exit;
 
-
   if assigned(loc.Prev) then
      loc.Prev.Next := loc.Next else
   begin
@@ -1057,6 +1056,7 @@ end;
 constructor TIteratorObject.Create(const O: TObject);
 begin
   Next := nil;
+  Prev := nil;
   Value := O;
 end;
 

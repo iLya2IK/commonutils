@@ -155,6 +155,7 @@ type
   public
     constructor Create(ASize : QWord);
     destructor Destroy; override;
+    procedure Realloc(AValue : Pointer);
     property Value : Pointer read GetValue;
   end;
 
@@ -542,6 +543,16 @@ destructor TThreadPointer.Destroy;
 begin
   FreeMem(FValue);
   inherited Destroy;
+end;
+
+procedure TThreadPointer.Realloc(AValue: Pointer);
+begin
+  Lock;
+  try
+    FValue:= AValue;
+  finally
+    UnLock;
+  end;
 end;
 
 { TThreadQWord }
