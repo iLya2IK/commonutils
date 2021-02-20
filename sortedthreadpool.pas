@@ -662,6 +662,7 @@ begin
     begin
       if j.IsReady(TS) then
       begin
+        j.FNeedToRestart := false;
         if not assigned(Result) then
           Result := j
         else
