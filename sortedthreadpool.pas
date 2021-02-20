@@ -20,13 +20,26 @@ unit SortedThreadPool;
 interface
 
 uses
-  AvgLvlTree, ECommonObjs, Classes, SysUtils;
+  AvgLvlTree, ECommonObjs, OGLFastList, Classes, SysUtils;
 
 type
   TSortedThreadPool = class;
 
+  { TLinearJob }
+
   TLinearJob = class
+  private
+    FNeedToRestart : Boolean;
+    FHoldOnValueMs : Cardinal;
+    FHoldStart     : QWord;
   public
+    constructor Create;
+    //set NeedToRestart = true if need to restart job
+    //after execution
+    procedure RestartJob(aHoldDelay : Cardinal; aHoldStart : QWord);
+    property NeedToRestart : Boolean read FNeedToRestart write FNeedToRestart;
+    property HoldOnValueMs : Cardinal read FHoldOnValueMs write FHoldOnValueMs;
+    function IsReady(TS: QWord): Boolean;
     procedure Execute; virtual; abstract;
   end;
 
@@ -37,7 +50,8 @@ type
     FScore : Cardinal;
   public
     constructor Create(aScore : Cardinal); virtual;
-    property Score : Cardinal read FScore;
+    procedure UpdateScore; virtual;
+    property Score : Cardinal read FScore write FScore;
   end;
 
   TPoolThreadKind = (ptkLinear, ptkSorted);
@@ -85,6 +99,9 @@ type
     FThreadKind : TThreadPoolThreadKind;
     FSleepTime : TThreadJobToJobWait;
     FCurSleepTime : Integer;
+    FWaitedJobs : TFastCollection;
+    function ProceedWaitingJobs(TS: QWord) : TLinearJob;
+    procedure SendForWaiting(j: TLinearJob);
     function GetRunning: Boolean;
     function GetSleepTime: TJobToJobWait;
     function GetThreadKind: TPoolThreadKind;
@@ -119,8 +136,8 @@ type
     function GetRunning: Boolean;
     function GetRunningThreads: Integer;
     procedure ExcludeThread(aThread : TSortedCustomThread);
-    function GetSortedJob: TSortedJob;
-    function GetLinearJob : TLinearJob;
+    function GetSortedJob(TS: QWord): TSortedJob;
+    function GetLinearJob(TS: QWord): TLinearJob;
     function GetSortedJobsCount: Integer;
     function GetSortedThreadsCount: integer;
     function GetThreadJobToJobWait: TJobToJobWait;
@@ -161,6 +178,32 @@ const DefaultJobToJobWait : TJobToJobWait = (DefaultValue : SORTED_DEFAULT_SLEEP
                                              AdaptMax : 0);
 
 implementation
+
+{ TLinearJob }
+
+function TLinearJob.IsReady(TS: QWord): Boolean;
+begin
+  if FHoldOnValueMs > 0 then
+  begin
+    Result := (Int64(TS) - Int64(FHoldStart)) > Int64(FHoldOnValueMs);
+    if Result then
+      FHoldOnValueMs := 0;
+  end else Result := true;
+end;
+
+constructor TLinearJob.Create;
+begin
+  FNeedToRestart := false;
+  FHoldOnValueMs := 0;
+  FHoldStart:= 0;
+end;
+
+procedure TLinearJob.RestartJob(aHoldDelay: Cardinal; aHoldStart: QWord);
+begin
+  FNeedToRestart := true;
+  FHoldStart := aHoldStart;
+  FHoldOnValueMs:=aHoldDelay;
+end;
 
 { TThreadJobToJobWait }
 
@@ -270,9 +313,14 @@ begin
   FScore:= aScore;
 end;
 
+procedure TSortedJob.UpdateScore;
+begin
+  Inc(FScore);
+end;
+
 { TSortedThreadPool }
 
-function TSortedThreadPool.GetSortedJob: TSortedJob;
+function TSortedThreadPool.GetSortedJob(TS : QWord): TSortedJob;
 var JN : TAvgLvlTreeNode;
 begin
   FSortedListLocker.Lock;
@@ -281,16 +329,30 @@ begin
     begin
       JN := FSortedList.FindLowest;
       Result := TSortedJob(JN.Data);
-      FSortedList.Delete(JN);
+      while assigned(Result) and (not Result.IsReady(TS)) do
+      begin
+        JN := JN.Successor;
+        if assigned(JN) then
+          Result := TSortedJob(JN.Data) else
+          Result := nil;
+      end;
+      if assigned(JN) then
+        FSortedList.Delete(JN);
     end else Result := nil;
   finally
     FSortedListLocker.UnLock;
   end;
 end;
 
-function TSortedThreadPool.GetLinearJob: TLinearJob;
+function TSortedThreadPool.GetLinearJob(TS : QWord): TLinearJob;
 begin
   Result := TLinearJob(FLinearList.PopValue);
+  if assigned(Result) then
+  if not Result.IsReady(TS) then
+  begin
+    FLinearList.Push_back(Result);
+    Result := nil;
+  end;
 end;
 
 function TSortedThreadPool.GetSortedJobsCount: Integer;
@@ -588,6 +650,44 @@ end;
 
 { TSortedCustomThread }
 
+function TSortedCustomThread.ProceedWaitingJobs(TS: QWord): TLinearJob;
+var i : integer;
+    j : TLinearJob;
+begin
+  Result := nil;
+  for i := 0 to FWaitedJobs.Count-1 do
+  begin
+    j := TLinearJob(FWaitedJobs[i]);
+    if assigned(j) then
+    begin
+      if j.IsReady(TS) then
+      begin
+        if not assigned(Result) then
+          Result := j
+        else
+        begin
+          if j is TSortedJob then
+          begin
+            TSortedJob(j).UpdateScore;
+            FOwner.AddSorted(TSortedJob(j));
+          end else
+            FOwner.AddLinear(j);
+        end;
+        FWaitedJobs[i] := nil;
+      end;
+    end;
+  end;
+end;
+
+procedure TSortedCustomThread.SendForWaiting(j: TLinearJob);
+var i : integer;
+begin
+  i := FWaitedJobs.IndexOf(nil);
+  if i >= 0 then
+    FWaitedJobs[i] := j else
+    FWaitedJobs.Add(j);
+end;
+
 function TSortedCustomThread.GetRunning: Boolean;
 begin
   if not assigned(FRunning) then Result := false else
@@ -617,14 +717,18 @@ end;
 procedure TSortedCustomThread.Execute;
 var
   j: TLinearJob;
+  TS : QWord;
 begin
   while not Terminated do
   begin
     if FOwner.Running then
     begin
+      TS := GetTickCount64;
+      j := ProceedWaitingJobs(TS);
+      if not Assigned(j) then
       case ThreadKind of
-        ptkLinear:  j := FOwner.GetLinearJob;
-        ptkSorted:  j := FOwner.GetSortedJob;
+        ptkLinear:  j := FOwner.GetLinearJob(TS);
+        ptkSorted:  j := FOwner.GetSortedJob(TS);
       else
         j := nil;
       end;
@@ -635,13 +739,18 @@ begin
           myJob := j;
           try
             j.Execute;
+            if j.NeedToRestart then
+            begin
+              SendForWaiting(j);
+              j := nil;
+            end;
           except
             //Raise;
           end;
         finally
           FRunning.Value := False;
           myJob := nil;
-          j.Free;
+          if assigned(j) then j.Free;
         end;
         FSleepTime.AdaptToDec(FCurSleepTime);
       end else
@@ -654,6 +763,7 @@ end;
 constructor TSortedCustomThread.Create(AOwner: TSortedThreadPool;
   AKind: TPoolThreadKind; aSleepTime: TJobToJobWait);
 begin
+  FWaitedJobs := TFastCollection.Create;
   FOwner := AOwner;
   FRunning := TThreadBoolean.Create(False);
   FSleepTime:= TThreadJobToJobWait.Create(aSleepTime);
@@ -669,6 +779,7 @@ begin
   FreeAndNil(FRunning);
   FreeAndNil(FThreadKind);
   FreeAndNil(FSleepTime);
+  FreeAndNil(FWaitedJobs);
   inherited Destroy;
 end;
 
