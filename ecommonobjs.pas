@@ -309,6 +309,7 @@ type
     procedure Clean;
     procedure ExtractAll;
     procedure Push_back(const O : TObject);
+    procedure Push_front(const O : TObject);
     function Pop : TIteratorObject;
     function PopValue : TObject;
     procedure Erase(const loc : TIteratorObject);
@@ -959,6 +960,16 @@ begin
   Lock;
   try
     FSeq.Push_back(O);
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TThreadSafeFastSeq.Push_front(const O: TObject);
+begin
+  Lock;
+  try
+   FSeq.Push_front(O);
   finally
     UnLock;
   end;

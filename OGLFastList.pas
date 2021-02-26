@@ -88,6 +88,7 @@ type
     procedure Clean;
     procedure ExtractAll;
     procedure Push_back(const O : TObject);
+    procedure Push_front(const O : TObject);
     function Pop : TIteratorObject;
     function PopValue : TObject;
     procedure IteratorErase(const loc : PIterator);
@@ -934,6 +935,19 @@ begin
      FFirst := NL else
      FLast.Next := NL;
   FLast := NL;
+  Inc(FCount);
+end;
+
+procedure TFastSeq.Push_front(const O: TObject);
+var NL : TIteratorObject;
+begin
+  NL := TIteratorObject.Create(O);
+  NL.Next := FFirst;
+  if not assigned(FFirst) then begin
+    FLast := NL;
+  end else
+    FFirst.Prev := NL;
+  FFirst := NL;
   Inc(FCount);
 end;
 
