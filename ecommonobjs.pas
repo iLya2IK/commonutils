@@ -129,8 +129,10 @@ type
     procedure SetValue(AValue: Integer);
   public
     constructor Create(AValue : Integer);
-    procedure IncValue;
-    procedure DecValue;
+    procedure IncValue; overload;
+    procedure DecValue; overload;
+    procedure IncValue(IncSz : Integer); overload;
+    procedure DecValue(DecSz: Integer); overload;
     property Value : Integer read GetValue write SetValue;
   end;
 
@@ -1392,6 +1394,26 @@ begin
   Lock;
   try
     Dec(FValue);
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TThreadInteger.IncValue(IncSz: Integer);
+begin
+  Lock;
+  try
+    Inc(FValue, IncSz);
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TThreadInteger.DecValue(DecSz: Integer);
+begin
+  Lock;
+  try
+    Dec(FValue, DecSz);
   finally
     UnLock;
   end;
