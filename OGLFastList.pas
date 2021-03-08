@@ -89,6 +89,8 @@ type
     procedure ExtractAll;
     procedure Push_back(const O : TObject);
     procedure Push_front(const O : TObject);
+    function InsertBefore(loc: TIteratorObject; o: TObject): TIteratorObject;
+    function InsertAfter(loc: TIteratorObject; o: TObject): TIteratorObject;
     function Pop : TIteratorObject;
     function PopValue : TObject;
     procedure IteratorErase(const loc : PIterator);
@@ -948,6 +950,34 @@ begin
   end else
     FFirst.Prev := NL;
   FFirst := NL;
+  Inc(FCount);
+end;
+
+function TFastSeq.InsertBefore(loc: TIteratorObject; o: TObject) : TIteratorObject;
+begin
+  if not assigned(loc) then begin
+    Push_back(o);
+    Exit(FLast);
+  end;
+  result := TIteratorObject.Create(o);
+  result.Prev := loc.Prev;
+  if assigned(result.Prev) then result.Prev.Next := Result;
+  result.Next := loc; loc.Prev := result;
+  if loc = FFirst then FFirst := Result;
+  Inc(FCount);
+end;
+
+function TFastSeq.InsertAfter(loc: TIteratorObject; o: TObject): TIteratorObject;
+begin
+  if not assigned(loc) then begin
+    Push_back(o);
+    Exit(FLast);
+  end;
+  result := TIteratorObject.Create(o);
+  result.Next := loc.Next;
+  if assigned(result.Next) then result.Next.Prev := Result;
+  result.Prev := loc; loc.Next := result;
+  if loc = FLast then FLast := Result;
   Inc(FCount);
 end;
 

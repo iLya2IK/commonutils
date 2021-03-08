@@ -314,6 +314,8 @@ type
     procedure Push_front(const O : TObject);
     function Pop : TIteratorObject;
     function PopValue : TObject;
+    function InsertBefore(loc: TIteratorObject; o: TObject): TIteratorObject;
+    function InsertAfter(loc: TIteratorObject; o: TObject): TIteratorObject;
     procedure Erase(const loc : TIteratorObject);
     procedure EraseObject(const obj : TObject);
     function  EraseObjectsByCriteria(criteria: TThreadSafeCriteria;
@@ -992,6 +994,28 @@ begin
   Lock;
   try
     Result := FSeq.PopValue;
+  finally
+    UnLock;
+  end;
+end;
+
+function TThreadSafeFastSeq.InsertBefore(loc: TIteratorObject; o: TObject
+  ): TIteratorObject;
+begin
+  Lock;
+  try
+    Result := FSeq.InsertBefore(loc, o);
+  finally
+    UnLock;
+  end;
+end;
+
+function TThreadSafeFastSeq.InsertAfter(loc: TIteratorObject; o: TObject
+  ): TIteratorObject;
+begin
+  Lock;
+  try
+    Result := FSeq.InsertAfter(loc, o);
   finally
     UnLock;
   end;
