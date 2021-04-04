@@ -182,6 +182,8 @@ type
     procedure SetValue(AValue: Boolean);
   public
     constructor Create(AValue : Boolean);
+    procedure Enable;
+    procedure Disable;
     property Value : Boolean read GetValue write SetValue;
   end;
 
@@ -1344,6 +1346,16 @@ constructor TThreadBoolean.Create(AValue: Boolean);
 begin
   inherited Create;
   FValue := AValue;
+end;
+
+procedure TThreadBoolean.Enable;
+begin
+  Value := true;
+end;
+
+procedure TThreadBoolean.Disable;
+begin
+  Value := false;
 end;
 
 

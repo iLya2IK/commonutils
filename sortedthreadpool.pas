@@ -719,20 +719,32 @@ procedure TSortedCustomThread.Execute;
 var
   j: TLinearJob;
   TS : QWord;
+  s, k : boolean;
 begin
+  s := false;
   while not Terminated do
   begin
     if FOwner.Running then
     begin
       TS := GetTickCount64;
-      j := ProceedWaitingJobs(TS);
+
+      j := nil;
+      for k := false to true do
       if not Assigned(j) then
-      case ThreadKind of
-        ptkLinear:  j := FOwner.GetLinearJob(TS);
-        ptkSorted:  j := FOwner.GetSortedJob(TS);
-      else
-        j := nil;
+      begin
+        if (s = k) then
+          j := ProceedWaitingJobs(TS)
+        else
+        begin
+          case ThreadKind of
+            ptkLinear:  j := FOwner.GetLinearJob(TS);
+            ptkSorted:  j := FOwner.GetSortedJob(TS);
+          else
+            j := nil;
+          end;
+        end;
       end;
+      s := not s;
       if Assigned(j) then
       begin
         FRunning.Value := True;
