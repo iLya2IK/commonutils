@@ -73,6 +73,7 @@ Type
       PREP_RefreshClient: TSqlite3Prepared;
     FClientsDB: TExtSqlite3Dataset;
     FOnGenSessionID : TGetSessionID;
+    FStandStillTimeout : Integer;
     procedure SetClientsDB(const AValue: TExtSqlite3Dataset);
   protected
     Procedure DeleteSessionRecord(const ARecordName : String);virtual;
@@ -88,6 +89,7 @@ Type
     function  IsActiveSession(const ARecordName : String) : Boolean;
     Property ClientsDB : TExtSqlite3Dataset Read FClientsDB Write SetClientsDB;
     property OnGenSessionID : TGetSessionID read FOnGenSessionID write FOnGenSessionID;
+    property StandStillTimeout : Integer read FStandStillTimeout write FStandStillTimeout;
   end;
 
 Var
@@ -136,7 +138,7 @@ begin
 
   PREP_AddNewClient := aDB.AddNewPrep('INSERT INTO clients (id, timeout) values(?1, ?2);');
   PREP_AddNewClientIfNotExists := aDB.AddNewPrep('INSERT or ignore INTO clients (id, timeout) values(?1, ?2);');
-  PREP_GetClientExpired := aDB.AddNewPrep('select count(*) from clients where (id = ?1) and (julianday(current_timestamp)-julianday(last)) * 1440.0 > timeout;');
+  PREP_GetClientExpired := aDB.AddNewPrep('select count(*) from clients where (id = ?1) and ((julianday(current_timestamp)-julianday(last)) * 1440.0 > timeout);');
   PREP_GetClientExists := aDB.AddNewPrep('select count(*) from clients where (id = ?1);');
   PREP_DoCleanUp := aDB.AddNewPrep('delete from clients where (julianday(current_timestamp)-julianday(last)) * 1440.0 > timeout;');
   PREP_RemoveClient := aDB.AddNewPrep('delete from clients where id = ?1;');
