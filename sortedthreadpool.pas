@@ -83,6 +83,7 @@ type
     procedure SetValue(AValue: TJobToJobWait);
   public
     constructor Create(AValue : TJobToJobWait);
+    procedure AdaptDropToMin(var AValue: Integer);
     procedure AdaptToDec(var AValue : Integer);
     procedure AdaptToInc(var AValue : Integer);
     function IsEqual(AValue : TJobToJobWait) : Boolean;
@@ -232,6 +233,20 @@ begin
   inherited Create;
   if AValue.DefaultValue < 0 then AValue.DefaultValue:= SORTED_DEFAULT_SLEEP_TIME;
   FValue := AValue;
+end;
+
+procedure TThreadJobToJobWait.AdaptDropToMin(var AValue: Integer);
+begin
+  Lock;
+  try
+    if FValue.AdaptMax >
+       FValue.AdaptMin then
+    begin
+      AValue := FValue.AdaptMin;
+    end;
+  finally
+    UnLock;
+  end;
 end;
 
 procedure TThreadJobToJobWait.AdaptToDec(var AValue: Integer);
@@ -765,7 +780,7 @@ begin
           myJob := nil;
           if assigned(j) then j.Free;
         end;
-        FSleepTime.AdaptToDec(FCurSleepTime);
+        FSleepTime.AdaptDropToMin(FCurSleepTime);
       end else
         FSleepTime.AdaptToInc(FCurSleepTime);
     end;
