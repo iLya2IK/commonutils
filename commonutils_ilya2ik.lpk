@@ -2,7 +2,6 @@
 <CONFIG>
   <Package Version="4">
     <Name Value="commonutils_ilya2ik"/>
-    <Type Value="RunAndDesignTime"/>
     <Author Value="Copyright (c) 2019-2021, Ilya Medvedkov"/>
     <CompilerOptions>
       <Version Value="11"/>
@@ -17,59 +16,63 @@
     <Description Value="Set of Free Pascal units, used in several projects"/>
     <License Value="LGPL v2"/>
     <Version Major="1" Build="1"/>
-    <Files Count="13">
+    <Files Count="14">
       <Item1>
         <Filename Value="bufferedstream.pas"/>
         <UnitName Value="BufferedStream"/>
       </Item1>
       <Item2>
-        <Filename Value="ecommonobjs.pas"/>
-        <UnitName Value="ECommonObjs"/>
+        <Filename Value="extmemorystream.pas"/>
+        <UnitName Value="extmemorystream"/>
       </Item2>
       <Item3>
-        <Filename Value="gwidgetsethelper.pas"/>
-        <UnitName Value="gwidgetsethelper"/>
+        <Filename Value="ecommonobjs.pas"/>
+        <UnitName Value="ECommonObjs"/>
       </Item3>
       <Item4>
-        <Filename Value="gzstream.pas"/>
-        <UnitName Value="gzstream"/>
+        <Filename Value="gwidgetsethelper.pas"/>
+        <UnitName Value="gwidgetsethelper"/>
       </Item4>
       <Item5>
-        <Filename Value="kcThreadPool.pas"/>
-        <UnitName Value="kcThreadPool"/>
+        <Filename Value="gzstream.pas"/>
+        <UnitName Value="gzstream"/>
       </Item5>
       <Item6>
-        <Filename Value="OGLFastList.pas"/>
-        <UnitName Value="OGLFastList"/>
+        <Filename Value="kcThreadPool.pas"/>
+        <UnitName Value="kcThreadPool"/>
       </Item6>
       <Item7>
-        <Filename Value="oglfastvarianthash.pas"/>
-        <UnitName Value="OGLFastVariantHash"/>
+        <Filename Value="OGLFastList.pas"/>
+        <UnitName Value="OGLFastList"/>
       </Item7>
       <Item8>
-        <Filename Value="sortedthreadpool.pas"/>
-        <UnitName Value="SortedThreadPool"/>
+        <Filename Value="oglfastvarianthash.pas"/>
+        <UnitName Value="OGLFastVariantHash"/>
       </Item8>
       <Item9>
-        <Filename Value="extsqlite3/extsqlite3backup.pas"/>
-        <UnitName Value="ExtSqlite3Backup"/>
+        <Filename Value="sortedthreadpool.pas"/>
+        <UnitName Value="SortedThreadPool"/>
       </Item9>
       <Item10>
-        <Filename Value="extsqlite3/extsqlite3ds.pas"/>
-        <UnitName Value="ExtSqlite3DS"/>
+        <Filename Value="extsqlite3/extsqlite3backup.pas"/>
+        <UnitName Value="ExtSqlite3Backup"/>
       </Item10>
       <Item11>
-        <Filename Value="extsqlite3/extsqlite3funcs.pas"/>
-        <UnitName Value="extsqlite3funcs"/>
+        <Filename Value="extsqlite3/extsqlite3ds.pas"/>
+        <UnitName Value="ExtSqlite3DS"/>
       </Item11>
       <Item12>
-        <Filename Value="extsqlite3/sqlitelogger.pas"/>
-        <UnitName Value="sqlitelogger"/>
+        <Filename Value="extsqlite3/extsqlite3funcs.pas"/>
+        <UnitName Value="extsqlite3funcs"/>
       </Item12>
       <Item13>
+        <Filename Value="extsqlite3/sqlitelogger.pas"/>
+        <UnitName Value="sqlitelogger"/>
+      </Item13>
+      <Item14>
         <Filename Value="extsqlite3/sqlitewebsession.pas"/>
         <UnitName Value="sqlitewebsession"/>
-      </Item13>
+      </Item14>
     </Files>
     <RequiredPkgs Count="3">
       <Item1>

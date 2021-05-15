@@ -5,6 +5,7 @@ unit gwidgetsethelper;
 
 interface
 
+{$IFDEF UNIX}
 uses
   BaseUnix, Unix, glib2,
   Classes, Process,
@@ -408,6 +409,10 @@ begin
     FPipeHandler := GWidgetHelper.AddPipeEventHandler(Output.Handle, @HandlePipeInput, 0);
   FProcessHandler := GWidgetHelper.AddProcessEventHandler(ProcessHandle, @HandleProcessTermination, 0);
 end;
+{$ELSE}
+{$Warning GWidgetsethelper using for Unix only}
+implementation
+{$ENDIF}
 
 end.
 

@@ -8,17 +8,11 @@ unit commonutils_ilya2ik;
 interface
 
 uses
-  BufferedStream, ECommonObjs, gwidgetsethelper, gzstream, kcThreadPool, 
-  OGLFastList, OGLFastVariantHash, SortedThreadPool, ExtSqlite3Backup, 
-  ExtSqlite3DS, extsqlite3funcs, sqlitelogger, sqlitewebsession, 
-  LazarusPackageIntf;
+  BufferedStream, extmemorystream, ECommonObjs, gwidgetsethelper, gzstream, 
+  kcThreadPool, OGLFastList, OGLFastVariantHash, SortedThreadPool, 
+  ExtSqlite3Backup, ExtSqlite3DS, extsqlite3funcs, sqlitelogger, 
+  sqlitewebsession;
 
 implementation
 
-procedure Register;
-begin
-end;
-
-initialization
-  RegisterPackage('commonutils_ilya2ik', @Register);
 end.
