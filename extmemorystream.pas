@@ -19,11 +19,11 @@ private
   procedure Init(ASize: PtrInt; AMinBufferSize, ABufferInitInc,
     ABufferMaxInc: Word);
   procedure SetCapacity(NewSize : PtrInt);
-  procedure ClearMemory;
 protected
   Function GetSize : Int64; Override;
   function GetPosition: Int64; Override;
 public
+  constructor Create; overload;
   constructor Create(ASize : PtrInt); overload;
   constructor Create(ASize: PtrInt; AMinBufferSize, ABufferInitInc,
     ABufferMaxInc: Word); overload;
@@ -31,6 +31,8 @@ public
 
   procedure SetPointer(Ptr: Pointer; ASize: PtrInt);
   procedure SetSize(const aNewSize : Int64); override;
+  procedure CopyMemory(const Src; Count : PtrInt);
+  procedure Clear;
   function Write(const Buffer; Count: Longint): Longint; override;
   function Read(var Buffer; Count: LongInt): LongInt; override;
   function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
@@ -52,7 +54,9 @@ begin
   FBufferInc := ABufferInitInc;
   FBufferMaxInc := ABufferMaxInc;
   FCapacity := FSize;
-  FMemory := GetMem(FSize);
+  if FSize > 0 then
+   FMemory := GetMem(FSize) else
+   FMemory := nil;
 end;
 
 procedure TExtMemoryStream.SetCapacity(NewSize: PtrInt);
@@ -72,14 +76,6 @@ begin
   end;
 end;
 
-procedure TExtMemoryStream.ClearMemory;
-begin
-  if Assigned(FMemory) then FreeMemAndNil(FMemory);
-  FSize := 0;
-  FPosition := 0;
-  FCapacity := 0;
-end;
-
 function TExtMemoryStream.GetSize: Int64;
 begin
   Result:=FSize;
@@ -88,6 +84,13 @@ end;
 function TExtMemoryStream.GetPosition: Int64;
 begin
   Result:=FPosition;
+end;
+
+constructor TExtMemoryStream.Create;
+begin
+  inherited Create;
+  Init(0, EXT_DEF_MIN_BUFFER_SIZE, EXT_DEF_BUFFER_INC,
+          EXT_DEF_BUFFER_MAX_INC);
 end;
 
 constructor TExtMemoryStream.Create(ASize: PtrInt);
@@ -100,13 +103,13 @@ end;
 constructor TExtMemoryStream.Create(ASize : PtrInt; AMinBufferSize,
   ABufferInitInc, ABufferMaxInc: Word);
 begin
- inherited Create;
- Init(ASize, AMinBufferSize, ABufferInitInc, ABufferMaxInc);
+  inherited Create;
+  Init(ASize, AMinBufferSize, ABufferInitInc, ABufferMaxInc);
 end;
 
 destructor TExtMemoryStream.Destroy;
 begin
-  ClearMemory;
+  Clear;
   inherited Destroy;
 end;
 
@@ -114,14 +117,15 @@ procedure TExtMemoryStream.SetPointer(Ptr: Pointer; ASize: PtrInt);
 begin
   if FMemory <> Ptr then
   begin
-    ClearMemory;
     if Assigned(Ptr) then
     begin
+      if Assigned(FMemory) then Freemem(FMemory);
       FMemory:=Ptr;
       FSize:=ASize;
       FCapacity:=ASize;
       FPosition:=0;
-    end;
+    end else
+      Clear;
   end else
    if Assigned(Ptr) then SetSize(ASize);
 end;
@@ -132,12 +136,30 @@ begin
   FSize := aNewSize;
 end;
 
+procedure TExtMemoryStream.CopyMemory(const Src; Count : PtrInt);
+begin
+  SetSize(Count);
+  Move(Src, FMemory^, Count);
+  FPosition := 0;
+end;
+
+procedure TExtMemoryStream.Clear;
+begin
+  FSize := 0;
+  FCapacity := 0;
+  FPosition := 0;
+  if Assigned(FMemory) then FreeMemAndNil(FMemory);
+end;
+
 function TExtMemoryStream.Write(const Buffer; Count: Longint): Longint;
+var newSize : PtrInt;
 begin
   Result:=Count;
   If (Count>0) then
   begin
-    SetCapacity(FPosition + Count);
+    newSize := FPosition + Count;
+    if newSize > FSize then
+      SetSize(newSize);
     Move(Buffer, Pointer(FMemory+FPosition)^, Result);
     Inc(FPosition, Result);
   end;

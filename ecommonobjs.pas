@@ -18,7 +18,7 @@ unit ECommonObjs;
 interface
 
 uses
-  Classes, SysUtils, OGLFastList;
+  Classes, SysUtils, OGLFastList, extmemorystream;
 
 type
   { TNetCustomLockedObject }
@@ -495,12 +495,12 @@ end;
 
 constructor TRefMemoryStream.Create;
 begin
-  inherited Create(TMemoryStream.Create);
+  inherited Create(TExtMemoryStream.Create);
 end;
 
 procedure TRefMemoryStream.WriteTo(Strm: TStream; from, Sz: Int64);
 begin
-  Strm.Write(PByte(TMemoryStream(Stream).Memory)[from], Sz);
+  Strm.Write(PByte(TExtMemoryStream(Stream).Memory)[from], Sz);
 end;
 
 { TReferencedStream }
