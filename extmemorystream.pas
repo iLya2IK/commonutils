@@ -1,3 +1,7 @@
+{ ExtMemoryStream
+   stream class with owned memory buffer
+   Copyright (c) 2021 Ilya Medvedkov   }
+
 unit extmemorystream;
 
 {$mode objfpc}{$H+}
