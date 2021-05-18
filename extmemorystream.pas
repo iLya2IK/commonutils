@@ -19,9 +19,9 @@ TExtMemoryStream = class(TStream)
 private
   FMemory: Pointer;
   FSize, FPosition, FCapacity: PtrInt;
-  FBufferInc, FBufferMin, FBufferMaxInc : Word;
-  procedure Init(ASize: PtrInt; AMinBufferSize, ABufferInitInc,
-    ABufferMaxInc: Word);
+  FBufferInc, FBufferMin, FBufferMaxInc : DWord;
+  procedure Init(ASize : PtrInt; AMinBufferSize, ABufferInitInc,
+    ABufferMaxInc : DWord);
   procedure SetCapacity(NewSize : PtrInt);
 protected
   Function GetSize : Int64; Override;
@@ -29,8 +29,8 @@ protected
 public
   constructor Create; overload;
   constructor Create(ASize : PtrInt); overload;
-  constructor Create(ASize: PtrInt; AMinBufferSize, ABufferInitInc,
-    ABufferMaxInc: Word); overload;
+  constructor Create(ASize : PtrInt; AMinBufferSize, ABufferInitInc,
+    ABufferMaxInc : DWord); overload;
   destructor Destroy; override;
 
   procedure SetPointer(Ptr: Pointer; ASize: PtrInt);
@@ -46,12 +46,12 @@ end;
 implementation
 
 const
-  EXT_DEF_MIN_BUFFER_SIZE = Word(512);
-  EXT_DEF_BUFFER_INC      = Word(1024);
-  EXT_DEF_BUFFER_MAX_INC  = Word(32768);
+  EXT_DEF_MIN_BUFFER_SIZE = DWord(512);
+  EXT_DEF_BUFFER_INC      = DWord(1024);
+  EXT_DEF_BUFFER_MAX_INC  = DWord(32768);
 
 procedure TExtMemoryStream.Init(ASize : PtrInt; AMinBufferSize,
-  ABufferInitInc, ABufferMaxInc: Word);
+  ABufferInitInc, ABufferMaxInc: DWord);
 begin
   FSize := ASize;
   FBufferMin := AMinBufferSize;
@@ -105,7 +105,7 @@ begin
 end;
 
 constructor TExtMemoryStream.Create(ASize : PtrInt; AMinBufferSize,
-  ABufferInitInc, ABufferMaxInc: Word);
+  ABufferInitInc, ABufferMaxInc: DWord);
 begin
   inherited Create;
   Init(ASize, AMinBufferSize, ABufferInitInc, ABufferMaxInc);
