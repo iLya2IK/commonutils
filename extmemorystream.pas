@@ -19,9 +19,9 @@ TExtMemoryStream = class(TStream)
 private
   FMemory: Pointer;
   FSize, FPosition, FCapacity: PtrInt;
-  FBufferInc, FBufferMin, FBufferMaxInc : DWord;
+  FBufferInc, FBufferMin, FBufferMaxInc : Byte;
   procedure Init(ASize : PtrInt; AMinBufferSize, ABufferInitInc,
-    ABufferMaxInc : DWord);
+    ABufferMaxInc : Byte);
   procedure SetCapacity(NewSize : PtrInt);
 protected
   Function GetSize : Int64; Override;
@@ -30,7 +30,7 @@ public
   constructor Create; overload;
   constructor Create(ASize : PtrInt); overload;
   constructor Create(ASize : PtrInt; AMinBufferSize, ABufferInitInc,
-    ABufferMaxInc : DWord); overload;
+    ABufferMaxInc : Byte); overload;
   destructor Destroy; override;
 
   procedure SetPointer(Ptr: Pointer; ASize: PtrInt);
@@ -46,12 +46,12 @@ end;
 implementation
 
 const
-  EXT_DEF_MIN_BUFFER_SIZE = DWord(512);
-  EXT_DEF_BUFFER_INC      = DWord(1024);
-  EXT_DEF_BUFFER_MAX_INC  = DWord(32768);
+  EXT_DEF_MIN_BUFFER_SIZE = Byte(9);
+  EXT_DEF_BUFFER_INC      = Byte(10);
+  EXT_DEF_BUFFER_MAX_INC  = Byte(15);
 
 procedure TExtMemoryStream.Init(ASize : PtrInt; AMinBufferSize,
-  ABufferInitInc, ABufferMaxInc: DWord);
+  ABufferInitInc, ABufferMaxInc: Byte);
 begin
   FSize := ASize;
   FBufferMin := AMinBufferSize;
@@ -67,13 +67,13 @@ procedure TExtMemoryStream.SetCapacity(NewSize: PtrInt);
 begin
   if FCapacity < NewSize then
   begin
-    if NewSize < PtrInt(FBufferMin) then
+    if NewSize < PtrInt(1 shl FBufferMin) then
     begin
-      FCapacity := FBufferMin;
+      FCapacity := PtrInt(1 shl FBufferMin);
     end else
     begin
-      FCapacity := (NewSize div FBufferInc + 1) * FBufferInc;
-      FBufferInc := FBufferInc shl 1;
+      FCapacity := ((NewSize shr FBufferInc) + 1) shl FBufferInc;
+      Inc(FBufferInc);
       if FBufferInc > FBufferMaxInc then FBufferInc := FBufferMaxInc;
     end;
     FMemory := ReAllocMem(FMemory, FCapacity);
@@ -105,7 +105,7 @@ begin
 end;
 
 constructor TExtMemoryStream.Create(ASize : PtrInt; AMinBufferSize,
-  ABufferInitInc, ABufferMaxInc: DWord);
+  ABufferInitInc, ABufferMaxInc: Byte);
 begin
   inherited Create;
   Init(ASize, AMinBufferSize, ABufferInitInc, ABufferMaxInc);
