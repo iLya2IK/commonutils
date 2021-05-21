@@ -221,10 +221,14 @@ type
     FUpdates  : Integer;
 
     function GetCount: Integer;
+    function GetDelimitedText : String;
+    function GetDelimiter : Char;
     function GetStr(index : integer): String;
     function GetText: String;
-    procedure SetStr(index : integer; AValue: String);
-    procedure SetText(AValue: String);
+    procedure SetDelimitedText(const AValue : String);
+    procedure SetDelimiter(AValue : Char);
+    procedure SetStr(index : integer; const AValue : String);
+    procedure SetText(const AValue: String);
     procedure DoChange;
     function GetOnChange: TNotifyEvent;
     procedure SetOnChange(AValue: TNotifyEvent);
@@ -240,6 +244,8 @@ type
     property Item[index : integer] : String read GetStr write SetStr; default;
     property Count : Integer read GetCount;
     property Text : String read GetText write SetText;
+    property DelimitedText : String read GetDelimitedText write SetDelimitedText;
+    property Delimiter : Char read GetDelimiter write SetDelimiter;
     property OnChange : TNotifyEvent read GetOnChange write SetOnChange;
   end;
 
@@ -1467,6 +1473,26 @@ begin
   end;
 end;
 
+function TThreadStringList.GetDelimitedText : String;
+begin
+  Lock;
+  try
+    Result := FStringList.DelimitedText;
+  finally
+    UnLock;
+  end;
+end;
+
+function TThreadStringList.GetDelimiter : Char;
+begin
+  Lock;
+  try
+    Result := FStringList.Delimiter;
+  finally
+    UnLock;
+  end;
+end;
+
 function TThreadStringList.GetStr(index : integer): String;
 begin
   Lock;
@@ -1487,7 +1513,28 @@ begin
   end;
 end;
 
-procedure TThreadStringList.SetStr(index : integer; AValue: String);
+procedure TThreadStringList.SetDelimitedText(const AValue : String);
+begin
+  Lock;
+  try
+    FStringList.DelimitedText := AValue;
+  finally
+    UnLock;
+  end;
+  DoChange;
+end;
+
+procedure TThreadStringList.SetDelimiter(AValue : Char);
+begin
+  Lock;
+  try
+    FStringList.Delimiter := AValue;
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TThreadStringList.SetStr(index : integer; const AValue: String);
 begin
   Lock;
   try
@@ -1498,7 +1545,7 @@ begin
   DoChange;
 end;
 
-procedure TThreadStringList.SetText(AValue: String);
+procedure TThreadStringList.SetText(const AValue : String);
 begin
   Lock;
   try
