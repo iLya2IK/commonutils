@@ -23,7 +23,7 @@
       </Item1>
       <Item2>
         <Filename Value="extmemorystream.pas"/>
-        <UnitName Value="extmemorystream"/>
+        <UnitName Value="ExtMemoryStream"/>
       </Item2>
       <Item3>
         <Filename Value="ecommonobjs.pas"/>
@@ -31,11 +31,11 @@
       </Item3>
       <Item4>
         <Filename Value="gwidgetsethelper.pas"/>
-        <UnitName Value="gwidgetsethelper"/>
+        <UnitName Value="GWidgetsetHelper"/>
       </Item4>
       <Item5>
         <Filename Value="gzstream.pas"/>
-        <UnitName Value="gzstream"/>
+        <UnitName Value="gzStream"/>
       </Item5>
       <Item6>
         <Filename Value="kcThreadPool.pas"/>
@@ -63,15 +63,15 @@
       </Item11>
       <Item12>
         <Filename Value="extsqlite3/extsqlite3funcs.pas"/>
-        <UnitName Value="extsqlite3funcs"/>
+        <UnitName Value="ExtSqlite3funcs"/>
       </Item12>
       <Item13>
         <Filename Value="extsqlite3/sqlitelogger.pas"/>
-        <UnitName Value="sqlitelogger"/>
+        <UnitName Value="SqliteLogger"/>
       </Item13>
       <Item14>
         <Filename Value="extsqlite3/sqlitewebsession.pas"/>
-        <UnitName Value="sqlitewebsession"/>
+        <UnitName Value="SqliteWebSession"/>
       </Item14>
     </Files>
     <RequiredPkgs Count="1">
