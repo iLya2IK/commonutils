@@ -15,17 +15,13 @@ type
 
 { TExtMemoryStream }
 
-TExtMemoryStream = class(TStream)
+TExtMemoryStream = class(TCustomMemoryStream)
 private
-  FMemory: Pointer;
-  FSize, FPosition, FCapacity: PtrInt;
+  FCapacity: PtrInt;
   FBufferInc, FBufferMin, FBufferMaxInc : Byte;
   procedure Init(ASize : PtrInt; AMinBufferSize, ABufferInitInc,
     ABufferMaxInc : Byte);
   procedure SetCapacity(NewSize : PtrInt);
-protected
-  Function GetSize : Int64; Override;
-  function GetPosition: Int64; Override;
 public
   constructor Create; overload;
   constructor Create(ASize : PtrInt); overload;
@@ -33,14 +29,12 @@ public
     ABufferMaxInc : Byte); overload;
   destructor Destroy; override;
 
-  procedure SetPointer(Ptr: Pointer; ASize: PtrInt);
+  procedure SetPtr(Ptr: Pointer; ASize: PtrInt);
   procedure SetSize(const aNewSize : Int64); override;
   procedure CopyMemory(const Src; Count : PtrInt);
   procedure Clear;
   function Write(const Buffer; Count: Longint): Longint; override;
   function Read(var Buffer; Count: LongInt): LongInt; override;
-  function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
-  property Memory: Pointer read FMemory;
 end;
 
 implementation
@@ -53,17 +47,17 @@ const
 procedure TExtMemoryStream.Init(ASize : PtrInt; AMinBufferSize,
   ABufferInitInc, ABufferMaxInc: Byte);
 begin
-  FSize := ASize;
   FBufferMin := AMinBufferSize;
   FBufferInc := ABufferInitInc;
   FBufferMaxInc := ABufferMaxInc;
-  FCapacity := FSize;
-  if FSize > 0 then
-   FMemory := GetMem(FSize) else
-   FMemory := nil;
+  FCapacity := ASize;
+  if ASize > 0 then
+   SetPointer(GetMem(ASize), ASize) else
+   SetPointer(nil, 0);
 end;
 
 procedure TExtMemoryStream.SetCapacity(NewSize: PtrInt);
+var fmem : Pointer;
 begin
   if FCapacity < NewSize then
   begin
@@ -76,18 +70,9 @@ begin
       Inc(FBufferInc);
       if FBufferInc > FBufferMaxInc then FBufferInc := FBufferMaxInc;
     end;
-    FMemory := ReAllocMem(FMemory, FCapacity);
+    fmem := Memory;
+    SetPointer(ReAllocMem(fmem, FCapacity), NewSize);
   end;
-end;
-
-function TExtMemoryStream.GetSize: Int64;
-begin
-  Result:=FSize;
-end;
-
-function TExtMemoryStream.GetPosition: Int64;
-begin
-  Result:=FPosition;
 end;
 
 constructor TExtMemoryStream.Create;
@@ -117,17 +102,16 @@ begin
   inherited Destroy;
 end;
 
-procedure TExtMemoryStream.SetPointer(Ptr: Pointer; ASize: PtrInt);
+procedure TExtMemoryStream.SetPtr(Ptr: Pointer; ASize: PtrInt);
 begin
-  if FMemory <> Ptr then
+  if Memory <> Ptr then
   begin
     if Assigned(Ptr) then
     begin
-      if Assigned(FMemory) then Freemem(FMemory);
-      FMemory:=Ptr;
-      FSize:=ASize;
+      if Assigned(Memory) then Freemem(Memory);
+      SetPointer(Ptr, ASize);
       FCapacity:=ASize;
-      FPosition:=0;
+      Seek(0, soFromBeginning);
     end else
       Clear;
   end else
@@ -137,22 +121,22 @@ end;
 procedure TExtMemoryStream.SetSize(const aNewSize: Int64);
 begin
   SetCapacity(aNewSize);
-  FSize := aNewSize;
+  SetPointer(Memory, aNewSize);
 end;
 
 procedure TExtMemoryStream.CopyMemory(const Src; Count : PtrInt);
 begin
   SetSize(Count);
-  Move(Src, FMemory^, Count);
-  FPosition := 0;
+  Move(Src, Memory^, Count);
+  Seek(0, soFromBeginning);
 end;
 
 procedure TExtMemoryStream.Clear;
 begin
-  FSize := 0;
+  if Assigned(Memory) then FreeMem(Memory);
+  SetPointer(nil, 0);
   FCapacity := 0;
-  FPosition := 0;
-  if Assigned(FMemory) then FreeMemAndNil(FMemory);
+  Seek(0, soFromBeginning);
 end;
 
 function TExtMemoryStream.Write(const Buffer; Count: Longint): Longint;
@@ -161,35 +145,25 @@ begin
   Result:=Count;
   If (Count>0) then
   begin
-    newSize := FPosition + Count;
-    if newSize > FSize then
+    newSize := Position + Count;
+    if newSize > Size then
       SetSize(newSize);
-    Move(Buffer, Pointer(FMemory+FPosition)^, Result);
-    Inc(FPosition, Result);
+    Move(Buffer, Pointer(Memory+Position)^, Result);
+    Seek(Result, soFromCurrent);
   end;
 end;
 
 function TExtMemoryStream.Read(var Buffer; Count: LongInt): LongInt;
 begin
  Result:=0;
- If (FSize>0) and (FPosition<Fsize) and (FPosition>=0) then
-   begin
-     Result:=Count;
-     If (Result>(FSize-FPosition)) then
-       Result:=(FSize-FPosition);
-     Move ((FMemory+FPosition)^,Buffer,Result);
-     Inc(FPosition, Result);
-   end;
-end;
-
-function TExtMemoryStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
-begin
- Case Word(Origin) of
-   soFromBeginning : FPosition:=Offset;
-   soFromEnd       : FPosition:=FSize+Offset;
-   soFromCurrent   : FPosition:=FPosition+Offset;
+ If (Size>0) and (Position<Size) and (Position>=0) then
+ begin
+   Result:=Count;
+   If (Result>(Size-Position)) then
+     Result:=(Size-Position);
+   Move(Pointer(Memory+Position)^, Buffer, Result);
+   Seek(Result, soFromCurrent);
  end;
- Result:=FPosition;
 end;
 
 end.
