@@ -167,9 +167,9 @@ type
   private
     FValue : Utf8String;
     function GetValue: UTF8String;
-    procedure SetValue(AValue: UTF8String);
+    procedure SetValue(const AValue: UTF8String);
   public
-    constructor Create(AValue : Utf8String);
+    constructor Create(const AValue : Utf8String);
     property Value : UTF8String read GetValue write SetValue;
   end;
 
@@ -193,9 +193,9 @@ type
   private
     FValue : WideString;
     function GetValue: WideString;
-    procedure SetValue(AValue: WideString);
+    procedure SetValue(const AValue: WideString);
   public
-    constructor Create(AValue : WideString);
+    constructor Create(const AValue : WideString);
     property Value : WideString read GetValue write SetValue;
   end;
 
@@ -349,7 +349,7 @@ type
   public
     constructor Create(aStrm : TStream);
     destructor Destroy; override;
-    procedure WriteTo(Strm : TStream; from, Sz : Int64); virtual;
+    procedure WriteTo(Strm : TStream; from, Sz : PtrInt); virtual;
     property Stream : TStream read FStream;
   end;
 
@@ -358,7 +358,8 @@ type
   TRefMemoryStream = class(TReferencedStream)
   public
     constructor Create;
-    procedure WriteTo(Strm : TStream; from, Sz : Int64); override;
+    constructor Create(Sz : PtrInt); overload;
+    procedure WriteTo(Strm : TStream; from, Sz : PtrInt); override;
   end;
 
 implementation
@@ -504,7 +505,12 @@ begin
   inherited Create(TExtMemoryStream.Create);
 end;
 
-procedure TRefMemoryStream.WriteTo(Strm: TStream; from, Sz: Int64);
+constructor TRefMemoryStream.Create(Sz : PtrInt);
+begin
+  inherited Create(TExtMemoryStream.Create(Sz));
+end;
+
+procedure TRefMemoryStream.WriteTo(Strm : TStream; from, Sz : PtrInt);
 begin
   Strm.Write(PByte(TExtMemoryStream(Stream).Memory)[from], Sz);
 end;
@@ -523,7 +529,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TReferencedStream.WriteTo(Strm: TStream; from, Sz: Int64);
+procedure TReferencedStream.WriteTo(Strm : TStream; from, Sz : PtrInt);
 begin
   Lock;
   try
@@ -671,7 +677,7 @@ begin
   end;
 end;
 
-procedure TThreadWideString.SetValue(AValue: WideString);
+procedure TThreadWideString.SetValue(const AValue : WideString);
 begin
   Lock;
   try
@@ -681,7 +687,7 @@ begin
   end;
 end;
 
-constructor TThreadWideString.Create(AValue: WideString);
+constructor TThreadWideString.Create(const AValue : WideString);
 begin
   inherited Create;
   FValue := AValue;
@@ -1377,7 +1383,7 @@ begin
   end;
 end;
 
-procedure TThreadUtf8String.SetValue(AValue: UTF8String);
+procedure TThreadUtf8String.SetValue(const AValue : UTF8String);
 begin
   Lock;
   try
@@ -1387,7 +1393,7 @@ begin
   end;
 end;
 
-constructor TThreadUtf8String.Create(AValue: Utf8String);
+constructor TThreadUtf8String.Create(const AValue : Utf8String);
 begin
   inherited Create;
   FValue:= AValue;
