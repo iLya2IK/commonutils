@@ -236,6 +236,8 @@ type
     constructor Create;
     destructor Destroy; override;
     function Add(const S: string): Integer;
+    procedure Delete(Index: Integer);
+    procedure DeleteFromTo(Index1, Index2: Integer);
     function IndexOf(const S: string): Integer;
     procedure AddStrings(S : TStringList);
     procedure BeginUpdate;
@@ -318,12 +320,12 @@ type
 
     procedure Clean;
     procedure ExtractAll;
-    procedure Push_back(const O : TObject);
-    procedure Push_front(const O : TObject);
+    procedure Push_back(const O : TObject); virtual;
+    procedure Push_front(const O : TObject); virtual;
     function Pop : TIteratorObject;
     function PopValue : TObject;
-    function InsertBefore(loc: TIteratorObject; o: TObject): TIteratorObject;
-    function InsertAfter(loc: TIteratorObject; o: TObject): TIteratorObject;
+    function InsertBefore(loc: TIteratorObject; o: TObject): TIteratorObject; virtual;
+    function InsertAfter(loc: TIteratorObject; o: TObject): TIteratorObject; virtual;
     procedure Erase(const loc : TIteratorObject);
     procedure EraseObject(const obj : TObject);
     function  EraseObjectsByCriteria(criteria: TThreadSafeCriteria;
@@ -1607,6 +1609,34 @@ begin
   Lock;
   try
     Result := FStringList.Add(S);
+  finally
+    UnLock;
+  end;
+  DoChange;
+end;
+
+procedure TThreadStringList.Delete(Index : Integer);
+begin
+  Lock;
+  try
+    FStringList.Delete(Index);
+  finally
+    UnLock;
+  end;
+  DoChange;
+end;
+
+procedure TThreadStringList.DeleteFromTo(Index1, Index2 : Integer);
+var i : integer;
+begin
+  Lock;
+  try
+    i := Index1;
+    while i <= Index2 do
+    begin
+      FStringList.Delete(Index1);
+      Inc(I);
+    end;
   finally
     UnLock;
   end;
