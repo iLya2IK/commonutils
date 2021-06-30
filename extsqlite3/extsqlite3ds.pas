@@ -450,6 +450,7 @@ procedure TSqlite3Prepared.UnLock;
 begin
   LeaveCriticalsection(FRTI);
 end;
+{$endif}
 
 function TSqlite3Prepared.Open(const Params: array of const) : Boolean;
 var C, i : integer;
@@ -487,8 +488,6 @@ procedure TSqlite3Prepared.Close;
 begin
   sqlite3_reset(vm);
 end;
-
-{$endif}
 
 destructor TSqlite3Prepared.Destroy;
 begin
