@@ -15,15 +15,15 @@
     </CompilerOptions>
     <Description Value="Set of Free Pascal units, used in several projects"/>
     <License Value="LGPL v2"/>
-    <Version Major="1" Build="1"/>
-    <Files Count="14">
+    <Version Major="1" Release="5" Build="12"/>
+    <Files Count="15">
       <Item1>
         <Filename Value="bufferedstream.pas"/>
         <UnitName Value="BufferedStream"/>
       </Item1>
       <Item2>
         <Filename Value="extmemorystream.pas"/>
-        <UnitName Value="ExtMemoryStream"/>
+        <UnitName Value="extmemorystream"/>
       </Item2>
       <Item3>
         <Filename Value="ecommonobjs.pas"/>
@@ -31,11 +31,11 @@
       </Item3>
       <Item4>
         <Filename Value="gwidgetsethelper.pas"/>
-        <UnitName Value="GWidgetsetHelper"/>
+        <UnitName Value="gwidgetsethelper"/>
       </Item4>
       <Item5>
         <Filename Value="gzstream.pas"/>
-        <UnitName Value="gzStream"/>
+        <UnitName Value="gzstream"/>
       </Item5>
       <Item6>
         <Filename Value="kcThreadPool.pas"/>
@@ -46,33 +46,37 @@
         <UnitName Value="OGLFastList"/>
       </Item7>
       <Item8>
-        <Filename Value="oglfastvarianthash.pas"/>
-        <UnitName Value="OGLFastVariantHash"/>
+        <Filename Value="oglfastnumlist.pas"/>
+        <UnitName Value="OGLFastNumList"/>
       </Item8>
       <Item9>
-        <Filename Value="sortedthreadpool.pas"/>
-        <UnitName Value="SortedThreadPool"/>
+        <Filename Value="oglfastvarianthash.pas"/>
+        <UnitName Value="OGLFastVariantHash"/>
       </Item9>
       <Item10>
-        <Filename Value="extsqlite3/extsqlite3backup.pas"/>
-        <UnitName Value="ExtSqlite3Backup"/>
+        <Filename Value="sortedthreadpool.pas"/>
+        <UnitName Value="SortedThreadPool"/>
       </Item10>
       <Item11>
-        <Filename Value="extsqlite3/extsqlite3ds.pas"/>
-        <UnitName Value="ExtSqlite3DS"/>
+        <Filename Value="extsqlite3/extsqlite3backup.pas"/>
+        <UnitName Value="ExtSqlite3Backup"/>
       </Item11>
       <Item12>
-        <Filename Value="extsqlite3/extsqlite3funcs.pas"/>
-        <UnitName Value="ExtSqlite3funcs"/>
+        <Filename Value="extsqlite3/extsqlite3ds.pas"/>
+        <UnitName Value="ExtSqlite3DS"/>
       </Item12>
       <Item13>
-        <Filename Value="extsqlite3/sqlitelogger.pas"/>
-        <UnitName Value="SqliteLogger"/>
+        <Filename Value="extsqlite3/extsqlite3funcs.pas"/>
+        <UnitName Value="extsqlite3funcs"/>
       </Item13>
       <Item14>
-        <Filename Value="extsqlite3/sqlitewebsession.pas"/>
-        <UnitName Value="SqliteWebSession"/>
+        <Filename Value="extsqlite3/sqlitelogger.pas"/>
+        <UnitName Value="sqlitelogger"/>
       </Item14>
+      <Item15>
+        <Filename Value="extsqlite3/sqlitewebsession.pas"/>
+        <UnitName Value="sqlitewebsession"/>
+      </Item15>
     </Files>
     <RequiredPkgs Count="1">
       <Item1>

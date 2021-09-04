@@ -9,9 +9,9 @@ interface
 
 uses
   BufferedStream, extmemorystream, ECommonObjs, gwidgetsethelper, gzstream, 
-  kcThreadPool, OGLFastList, OGLFastVariantHash, SortedThreadPool, 
-  ExtSqlite3Backup, ExtSqlite3DS, extsqlite3funcs, sqlitelogger, 
-  sqlitewebsession;
+  kcThreadPool, OGLFastList, OGLFastNumList, OGLFastVariantHash, 
+  SortedThreadPool, ExtSqlite3Backup, ExtSqlite3DS, extsqlite3funcs, 
+  sqlitelogger, sqlitewebsession;
 
 implementation
 

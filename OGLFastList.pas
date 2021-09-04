@@ -106,6 +106,15 @@ type
     property Count : integer read FCount;
   end;
 
+  { TFastDeq }
+
+  TFastDeq = class(TFastSeq)
+  public
+    function Last : TIteratorObject;
+    function Shift : TIteratorObject;
+    function ShiftValue : TObject;
+  end;
+
   PFastSeq = ^TFastSeq;
 
   TFastPointerList = class
@@ -172,16 +181,19 @@ begin
   repeat
     I := L;
     J := R;
-    Pivot := (L + R) div 2;
+    Pivot := (L + R) shr 1;
     PivotObj := numbers^[Pivot];
     repeat
-      while func(numbers^[i], PivotObj) < 0 do Inc(I);
-      while func(numbers^[j], PivotObj) > 0 do Dec(J);
+      while (I <> Pivot) and (func(numbers^[i], PivotObj) < 0) do Inc(I);
+      while (J <> Pivot) and (func(numbers^[j], PivotObj) > 0) do Dec(J);
       if I <= J then
       begin
-        O1 := numbers^[J];
-        numbers^[J] := numbers^[i];
-        numbers^[i] := O1;
+        if I < J then
+        begin
+          O1 := numbers^[J];
+          numbers^[J] := numbers^[i];
+          numbers^[i] := O1;
+        end;
         if Pivot = I then
         begin
           Pivot := J;
@@ -249,6 +261,31 @@ Procedure QuickSort(numbers : PObjectList; size : Integer; func : TObjectSortFun
 Begin
 	QSort(numbers, 0, size-1, func);
 End;
+
+{ TFastDeq }
+
+function TFastDeq.Last : TIteratorObject;
+begin
+  Result := FLast;
+end;
+
+function TFastDeq.Shift : TIteratorObject;
+begin
+  Result := ListBegin;
+  if Assigned(Result) and (Count > 1) then begin
+    Result.Prev := FLast;
+    FLast.Next := Result;
+    FLast := Result;
+    FFirst := Result.Next;
+    FFirst.Prev := nil;
+    Result.Next := nil;
+  end;
+end;
+
+function TFastDeq.ShiftValue : TObject;
+begin
+  Result := Shift.Value;
+end;
 
 { TFastPointerCollection }
 

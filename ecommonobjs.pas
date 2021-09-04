@@ -145,6 +145,10 @@ type
     procedure SetValue(AValue: QWord);
   public
     constructor Create(AValue : QWord);
+    procedure IncValue; overload;
+    procedure DecValue; overload;
+    procedure IncValue(IncSz : QWord); overload;
+    procedure DecValue(DecSz: QWord); overload;
     property Value : QWord read GetValue write SetValue;
   end;
 
@@ -602,6 +606,46 @@ constructor TThreadQWord.Create(AValue: QWord);
 begin
   inherited Create;
   FValue:= AValue;
+end;
+
+procedure TThreadQWord.IncValue;
+begin
+  Lock;
+  try
+    Inc(FValue);
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TThreadQWord.DecValue;
+begin
+  Lock;
+  try
+    Dec(FValue);
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TThreadQWord.IncValue(IncSz : QWord);
+begin
+  Lock;
+  try
+    Inc(FValue, IncSz);
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TThreadQWord.DecValue(DecSz : QWord);
+begin
+  Lock;
+  try
+    Dec(FValue, DecSz);
+  finally
+    UnLock;
+  end;
 end;
 
 { TNetHandle }
