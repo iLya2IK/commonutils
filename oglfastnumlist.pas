@@ -12,7 +12,7 @@ unit OGLFastNumList;
 interface
 
 uses
-  Classes, SysUtils;
+  Classes, SysUtils, Variants;
 
 type
   PNumByteArray = ^TNumByteArray;
@@ -31,7 +31,6 @@ type
     FItemSize   : Byte;
     FItemShift  : Byte;
     type
-      PT = ^T;
       TTypeList = array[0..MaxInt shl 4] of T;
       PTypeList = ^TTypeList;
     function Get(Index : Integer) : T;
@@ -45,7 +44,7 @@ type
     procedure SetSorted(AValue : Boolean);
     procedure Expand(growValue : Integer);
   protected
-    procedure SetCount(Val: Integer);
+    procedure DeleteAll; virtual;
     procedure SetCapacity(NewCapacity: Integer); virtual;
     function  DoCompare(Item1, Item2 : Pointer) : Integer; virtual; abstract;
     procedure QSort(L : Integer; R : Integer); virtual;
@@ -65,12 +64,12 @@ type
     procedure AddSorted(const aValue : T);
     function  IndexOf(const aValue : T) : Integer; virtual;
     procedure Insert(const aValue : T; aIndex : Integer);
-    procedure Delete(Index: Integer);
-    procedure DeleteItems(Index: Integer; nbVals: Cardinal);
+    procedure Delete(Index: Integer); virtual;
+    procedure DeleteItems(Index: Integer; nbVals: Cardinal); virtual;
     procedure Exchange(index1, index2: Integer);
     procedure Sort; inline;
 
-    property Count: Integer read FCount write SetCount;
+    property Count: Integer read FCount;
     property Capacity: Integer read FCapacity write SetCapacity;
 
     property Sorted : Boolean read FSorted write SetSorted;
@@ -125,9 +124,11 @@ type
     1: (PtrValue: Pointer);
     2: (Str : PChar);
     3: (WideStr : PWideChar);
+    4: (PVar : PVariant);
   end;
 
-  TKeyValuePairKind = (kvpkObject, kvpkPointer, kvpkString, kvpkWideString);
+  TKeyValuePairKind = (kvpkObject, kvpkPointer, kvpkString,
+                       kvpkWideString, kvpkVariant);
 
   { TFastKeyValuePairList }
 
@@ -135,12 +136,33 @@ type
   private
     FFreeValues : Boolean;
     FKeyValuePairKind : TKeyValuePairKind;
+    procedure DisposeValue(Index : Integer); inline;
   protected
+    procedure DeleteAll; override;
     function  DoCompare(Item1, Item2 : Pointer) : Integer; override;
   public
     constructor Create(aKind : TKeyValuePairKind;
                              aFreeValues : Boolean = true); overload;
     destructor Destroy; override;
+
+    procedure Delete(Index: Integer); override;
+    procedure DeleteItems(Index: Integer; nbVals: Cardinal); override;
+
+    procedure AddObj(const aKey : QWord; aValue : TObject);
+    procedure AddObjSorted(const aKey : QWord; aValue : TObject);
+    procedure AddPtr(const aKey : QWord; aValue : Pointer);
+    procedure AddPtrSorted(const aKey : QWord; aValue : Pointer);
+    procedure AddStr(const aKey : QWord; aValue : PChar);
+    procedure AddStrSorted(const aKey : QWord; aValue : PChar);
+    procedure AddStr(const aKey : QWord; const aValue : String); overload;
+    procedure AddStrSorted(const aKey : QWord; const aValue : String); overload;
+    procedure AddWStr(const aKey : QWord; aValue : PWideChar);
+    procedure AddWStrSorted(const aKey : QWord; aValue : PWideChar);
+    procedure AddWStr(const aKey : QWord; const aValue : WideString); overload;
+    procedure AddWStrSorted(const aKey : QWord; const aValue : WideString); overload;
+    procedure AddVariant(const aKey : QWord; const aValue : Variant);
+    procedure AddVariantSorted(const aKey : QWord; const aValue : Variant);
+
     property ValueKind : TKeyValuePairKind read FKeyValuePairKind
                                            write FKeyValuePairKind;
     property FreeValues : Boolean read FFreeValues write FFreeValues;
@@ -153,6 +175,7 @@ function KeyValuePair(const aKey : QWord; aValue : PChar) : TKeyValuePair; overl
 function KeyValuePair(const aKey : QWord; aValue : PWideChar) : TKeyValuePair; overload;
 function KeyValuePair(const aKey : QWord; const aValue : String) : TKeyValuePair; overload;
 function KeyValuePairWS(const aKey : QWord; const aValue : WideString) : TKeyValuePair;
+function KeyValuePairVar(const aKey : QWord; const aValue : Variant) : TKeyValuePair;
 
 
 implementation
@@ -214,6 +237,14 @@ begin
   Result.WideStr[sl] := #0;
 end;
 
+function KeyValuePairVar(const aKey : QWord; const aValue : Variant
+  ) : TKeyValuePair;
+begin
+  Result.Key := aKey;
+  Result.PVar := AllocMem(SizeOf(Variant));
+  Result.PVar^ := aValue;
+end;
+
 { TFastKeyValuePairList }
 
 constructor TFastKeyValuePairList.Create(aKind : TKeyValuePairKind;
@@ -222,6 +253,33 @@ begin
   inherited Create;
   FFreeValues := aFreeValues;
   FKeyValuePairKind := aKind;
+end;
+
+procedure TFastKeyValuePairList.DisposeValue(Index : Integer);
+begin
+  case FKeyValuePairKind of
+    kvpkObject :
+        List^[Index].Value.Free;
+    kvpkPointer :
+        Freemem(List^[Index].PtrValue);
+    kvpkString :
+        StrDispose(List^[Index].Str);
+    kvpkWideString :
+        StrDispose(List^[Index].WideStr);
+    kvpkVariant : begin
+        VarClear(List^[Index].PVar^);
+        Freemem(List^[Index].PVar);
+    end;
+  end;
+end;
+
+procedure TFastKeyValuePairList.DeleteAll;
+var i : integer;
+begin
+  if FreeValues then
+   for i := 0 to FCount-1 do
+     DisposeValue(I);
+  inherited DeleteAll;
 end;
 
 function TFastKeyValuePairList.DoCompare(Item1, Item2 : Pointer) : Integer;
@@ -249,28 +307,104 @@ begin
 end;
 
 destructor TFastKeyValuePairList.Destroy;
+begin
+  Flush;
+  inherited Destroy;
+end;
+
+procedure TFastKeyValuePairList.Delete(Index : Integer);
+begin
+  if FreeValues then
+    DisposeValue(Index);
+  inherited Delete(Index);
+end;
+
+procedure TFastKeyValuePairList.DeleteItems(Index : Integer; nbVals : Cardinal);
 var i : integer;
 begin
   if FreeValues then
-  case FKeyValuePairKind of
-    kvpkObject : begin
-      for i := 0 to FCount-1 do
-        List^[i].Value.Free;
-    end;
-    kvpkPointer : begin
-      for i := 0 to FCount-1 do
-        Freemem(List^[i].PtrValue);
-    end;
-    kvpkString : begin
-      for i := 0 to FCount-1 do
-        StrDispose(List^[i].Str);
-    end;
-    kvpkWideString : begin
-      for i := 0 to FCount-1 do
-        StrDispose(List^[i].WideStr);
-    end;
-  end;
-  inherited Destroy;
+    for i := Index to Index + nbVals - 1 do
+      DisposeValue(i);
+  inherited DeleteItems(Index, nbVals);
+end;
+
+procedure TFastKeyValuePairList.AddObj(const aKey : QWord; aValue : TObject);
+begin
+  Add(KeyValuePair(aKey, aValue));
+end;
+
+procedure TFastKeyValuePairList.AddObjSorted(const aKey : QWord;
+  aValue : TObject);
+begin
+  AddSorted(KeyValuePair(aKey, aValue));
+end;
+
+procedure TFastKeyValuePairList.AddPtr(const aKey : QWord; aValue : Pointer);
+begin
+  Add(KeyValuePair(aKey, aValue));
+end;
+
+procedure TFastKeyValuePairList.AddPtrSorted(const aKey : QWord;
+  aValue : Pointer);
+begin
+  AddSorted(KeyValuePair(aKey, aValue));
+end;
+
+procedure TFastKeyValuePairList.AddStr(const aKey : QWord; aValue : PChar);
+begin
+  Add(KeyValuePair(aKey, aValue));
+end;
+
+procedure TFastKeyValuePairList.AddStrSorted(const aKey : QWord; aValue : PChar
+  );
+begin
+  AddSorted(KeyValuePair(aKey, aValue));
+end;
+
+procedure TFastKeyValuePairList.AddStr(const aKey : QWord; const aValue : String);
+begin
+  Add(KeyValuePair(aKey, aValue));
+end;
+
+procedure TFastKeyValuePairList.AddStrSorted(const aKey : QWord;
+  const aValue : String);
+begin
+  AddSorted(KeyValuePair(aKey, aValue));
+end;
+
+procedure TFastKeyValuePairList.AddWStr(const aKey : QWord; aValue : PWideChar);
+begin
+  Add(KeyValuePair(aKey, aValue));
+end;
+
+procedure TFastKeyValuePairList.AddWStrSorted(const aKey : QWord;
+  aValue : PWideChar);
+begin
+  AddSorted(KeyValuePair(aKey, aValue));
+end;
+
+procedure TFastKeyValuePairList.AddWStr(const aKey : QWord;
+  const aValue : WideString);
+begin
+  Add(KeyValuePairWS(aKey, aValue));
+end;
+
+procedure TFastKeyValuePairList.AddWStrSorted(const aKey : QWord;
+  const aValue : WideString);
+begin
+  AddSorted(KeyValuePairWS(aKey, aValue));
+end;
+
+procedure TFastKeyValuePairList.AddVariant(const aKey : QWord;
+  const aValue : Variant);
+begin
+  Add(KeyValuePairVar(aKey, aValue));
+end;
+
+procedure TFastKeyValuePairList.AddVariantSorted(const aKey : QWord;
+  const aValue : Variant);
+begin
+  AddSorted(KeyValuePairVar(aKey, aValue));
 end;
 
 { TFastInt64List }
@@ -513,12 +647,9 @@ begin
   until I >= R;
 end;
 
-procedure TFastBaseNumericList.SetCount(Val: Integer);
+procedure TFastBaseNumericList.DeleteAll;
 begin
-  Assert(Val >= 0);
-  if Val > FCapacity then
-    SetCapacity(Val);
-  FCount := Val;
+  FCount := 0;
 end;
 
 procedure TFastBaseNumericList.SetCapacity(NewCapacity : Integer);
@@ -556,12 +687,12 @@ end;
 
 procedure TFastBaseNumericList.Flush;
 begin
-  SetCount(0);
+  DeleteAll;
 end;
 
 procedure TFastBaseNumericList.Clear;
 begin
-  SetCount(0);
+  DeleteAll;
   SetCapacity(0);
 end;
 
