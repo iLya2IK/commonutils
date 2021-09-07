@@ -309,9 +309,6 @@ type
     property Item[index : integer] : TObject read GetObject write SetObject; default;
   end;
 
-  TThreadSafeCriteria = function (obj : TObject; data : pointer) : Boolean of object;
-  TThreadSafeAction   = procedure (obj : TObject) of object;
-
   { TThreadSafeFastSeq }
 
   TThreadSafeFastSeq = class(TThreadSafeObject)
@@ -332,13 +329,15 @@ type
     function InsertAfter(loc: TIteratorObject; o: TObject): TIteratorObject; virtual;
     procedure Erase(const loc : TIteratorObject);
     procedure EraseObject(const obj : TObject);
-    function  EraseObjectsByCriteria(criteria: TThreadSafeCriteria;
+    function  EraseObjectsByCriteria(criteria: TFindObjectCriteria;
                                                data : pointer): Boolean;
-    procedure DoForAll(action: TThreadSafeAction);
+    function FindValue(criteria : TFindObjectCriteria; data : Pointer) : TObject;
+    procedure DoForAll(action: TObjectAction);
+    procedure DoForAllEx(action: TExObjectAction; data : Pointer);
     procedure Extract(const loc: TIteratorObject);
     procedure ExtractObject(const obj: TObject);
-    function  ExtractObjectsByCriteria(criteria: TThreadSafeCriteria;
-                                       afterextract : TThreadSafeAction;
+    function  ExtractObjectsByCriteria(criteria: TFindObjectCriteria;
+                                       afterextract : TObjectAction;
                                                data : pointer): Boolean;
     function ListBegin : TIteratorObject;
     function IteratorBegin : TIterator;
@@ -1102,44 +1101,43 @@ begin
 end;
 
 function TThreadSafeFastSeq.EraseObjectsByCriteria(
-  criteria: TThreadSafeCriteria; data: pointer): Boolean;
-var P, NP : TIteratorObject;
+  criteria : TFindObjectCriteria; data : pointer) : Boolean;
 begin
-  Result := false;
-
-  if not assigned(criteria) then Exit;
-
   Lock;
   try
-    P := ListBegin;
-    while P <> nil do
-    begin
-      NP := P.Next;
-      if criteria(P.Value, data) then
-      begin
-        Erase(P);
-        Result := True;
-      end;
-      P := NP;
-    end;
+    Result := FSeq.EraseObjectsByCriteria(criteria, data);
   finally
     UnLock;
   end;
 end;
 
-procedure TThreadSafeFastSeq.DoForAll(action: TThreadSafeAction);
-var P : TIteratorObject;
+function TThreadSafeFastSeq.FindValue(criteria : TFindObjectCriteria;
+  data : Pointer) : TObject;
 begin
-  if not Assigned(action) then exit;
-
   Lock;
   try
-    P := ListBegin;
-    while assigned(P) do
-    begin
-      action(P.Value);
-      P := P.Next;
-    end;
+    Result := FSeq.FindValue(criteria, data);
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TThreadSafeFastSeq.DoForAll(action : TObjectAction);
+begin
+  Lock;
+  try
+    FSeq.DoForAll(action);
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TThreadSafeFastSeq.DoForAllEx(action : TExObjectAction; data : Pointer
+  );
+begin
+  Lock;
+  try
+    FSeq.DoForAllEx(action, data);
   finally
     UnLock;
   end;
@@ -1166,28 +1164,12 @@ begin
 end;
 
 function TThreadSafeFastSeq.ExtractObjectsByCriteria(
-  criteria: TThreadSafeCriteria; afterextract: TThreadSafeAction; data: pointer
-  ): Boolean;
-var P, NP : TIteratorObject;
+  criteria : TFindObjectCriteria; afterextract : TObjectAction;
+  data : pointer) : Boolean;
 begin
-  Result := false;
-
-  if not assigned(criteria) then Exit;
-
   Lock;
   try
-    P := ListBegin;
-    while P <> nil do
-    begin
-      NP := P.Next;
-      if criteria(P.Value, data) then
-      begin
-        afterextract(P.Value);
-        Extract(P);
-        Result := True;
-      end;
-      P := NP;
-    end;
+    Result := FSeq.ExtractObjectsByCriteria(criteria, afterextract, data);
   finally
     UnLock;
   end;

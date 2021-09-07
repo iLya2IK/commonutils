@@ -62,6 +62,7 @@ type
 
     procedure Add(const aValue : T);
     procedure AddSorted(const aValue : T);
+    procedure AddEmptyValues(nbVals : Cardinal);
     function  IndexOf(const aValue : T) : Integer; virtual;
     procedure Insert(const aValue : T; aIndex : Integer);
     procedure Delete(Index: Integer); virtual;
@@ -706,13 +707,19 @@ end;
 procedure TFastBaseNumericList.AddSorted(const aValue : T);
 var i : Integer;
 begin
-  if FCapacity <= FCount then Expand(1);
   if (not FSorted) or (FCount = 0) then begin
     Add(aValue);
     Exit;
   end;
+  if FCapacity <= FCount then Expand(1);
   i := IndexOfRightMost(aValue);
   Insert(aValue, i + 1);
+end;
+
+procedure TFastBaseNumericList.AddEmptyValues(nbVals : Cardinal);
+begin
+  if FCapacity < (FCount + nbVals) then Expand(nbVals + FCount - FCapacity);
+  Inc(FCount, nbVals);
 end;
 
 function TFastBaseNumericList.IndexOfLeftMost(const aValue : T) : Integer;

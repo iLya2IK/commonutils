@@ -70,6 +70,11 @@ type
 
   PIterator = ^TIterator;
 
+  TFindObjectCriteria = function (obj : TObject; data : Pointer) : Boolean of object;
+  TObjectAction = procedure (obj : TObject) of object;
+  TExObjectAction = procedure (obj : TObject; data : Pointer) of object;
+
+
   { TFastSeq }
 
   TFastSeq = class
@@ -98,6 +103,16 @@ type
     procedure EraseObject(const obj : TObject);
     procedure Extract(const loc: TIteratorObject);
     procedure ExtractObject(const obj: TObject);
+
+    function FindValue(criteria : TFindObjectCriteria; data : Pointer) : TObject;
+    procedure DoForAll(action : TObjectAction);
+    procedure DoForAllEx(action : TExObjectAction; data : Pointer);
+    function  EraseObjectsByCriteria(criteria: TFindObjectCriteria;
+                                               data : pointer): Boolean;
+    function  ExtractObjectsByCriteria(criteria: TFindObjectCriteria;
+                                       afterextract : TObjectAction;
+                                       data : pointer): Boolean;
+
     function ListBegin : TIteratorObject;
     function IteratorBegin : TIterator;
     class function ListEnd   : TIteratorObject;
@@ -875,6 +890,89 @@ begin
       Exit;
     end;
     P := P.Next;
+  end;
+end;
+
+function TFastSeq.FindValue(criteria : TFindObjectCriteria; data : Pointer
+  ) : TObject;
+var it : TIteratorObject;
+begin
+  if not assigned(criteria) then Exit(nil);
+  it := ListBegin;
+  while Assigned(it) do
+  begin
+    if criteria(it.Value, data) then
+      Exit(it.Value);
+    it := it.Next;
+  end;
+  Result := nil;
+end;
+
+procedure TFastSeq.DoForAll(action : TObjectAction);
+var P : TIteratorObject;
+begin
+  if not Assigned(action) then exit;
+
+  P := ListBegin;
+  while assigned(P) do
+  begin
+    action(P.Value);
+    P := P.Next;
+  end;
+end;
+
+procedure TFastSeq.DoForAllEx(action : TExObjectAction; data : Pointer);
+var P : TIteratorObject;
+begin
+  if not Assigned(action) then exit;
+
+  P := ListBegin;
+  while assigned(P) do
+  begin
+    action(P.Value, data);
+    P := P.Next;
+  end;
+end;
+
+function TFastSeq.EraseObjectsByCriteria(criteria : TFindObjectCriteria;
+  data : pointer) : Boolean;
+var P, NP : TIteratorObject;
+begin
+  Result := false;
+  if not assigned(criteria) then Exit;
+
+  P := ListBegin;
+  while P <> nil do
+  begin
+    NP := P.Next;
+    if criteria(P.Value, data) then
+    begin
+      Erase(P);
+      Result := True;
+    end;
+    P := NP;
+  end;
+end;
+
+function TFastSeq.ExtractObjectsByCriteria(criteria : TFindObjectCriteria;
+  afterextract : TObjectAction; data : pointer) : Boolean;
+var P, NP : TIteratorObject;
+begin
+  Result := false;
+
+  if not assigned(criteria) then Exit;
+
+  P := ListBegin;
+  while P <> nil do
+  begin
+    NP := P.Next;
+    if criteria(P.Value, data) then
+    begin
+      afterextract(P.Value);
+      Extract(P);
+      Result := True;
+    end;
+    P := NP;
   end;
 end;
 
