@@ -117,90 +117,63 @@ type
 
   { TThreadSafeObject }
 
-  TThreadSafeObject = class(TNetCustomLockedObject)
+  TThreadSafeObject = class(TNetCustomLockedObject);
+
+  { TThreadGetValue }
+
+  generic TThreadGetValue<T> = class(TThreadSafeObject)
+  private
+    FValue : T;
+    function GetValue: T;
+  public
+    constructor Create(const AValue : T);
+    property Value : T read GetValue;
   end;
 
-  { TThreadInteger }
+  { TThreadGetSetValue }
 
-  TThreadInteger = class(TThreadSafeObject)
+  generic TThreadGetSetValue<T> = class(specialize TThreadGetValue<T>)
   private
-    FValue : Integer;
-    function GetValue: Integer;
-    procedure SetValue(AValue: Integer);
+    procedure SetValue(const AValue: T);
   public
-    constructor Create(AValue : Integer);
+    property Value : T read GetValue write SetValue;
+  end;
+
+  { TThreadNumeric }
+
+  generic TThreadNumeric<T> = class(specialize TThreadGetSetValue<T>)
+  public
     procedure IncValue; overload;
     procedure DecValue; overload;
-    procedure IncValue(IncSz : Integer); overload;
-    procedure DecValue(DecSz: Integer); overload;
-    property Value : Integer read GetValue write SetValue;
+    procedure IncValue(IncSz : T); overload;
+    procedure DecValue(DecSz: T); overload;
   end;
 
-  { TThreadQWord }
+  TThreadByte = class(specialize TThreadNumeric<Byte>);
+  TThreadWord = class(specialize TThreadNumeric<Word>);
+  TThreadInteger = class(specialize TThreadNumeric<Integer>);
+  TThreadCardinal = class(specialize TThreadNumeric<Cardinal>);
+  TThreadQWord = class(specialize TThreadNumeric<QWord>);
+  TThreadInt64 = class(specialize TThreadNumeric<Int64>);
 
-  TThreadQWord = class(TThreadSafeObject)
-  private
-    FValue : QWord;
-    function GetValue: QWord;
-    procedure SetValue(AValue: QWord);
-  public
-    constructor Create(AValue : QWord);
-    procedure IncValue; overload;
-    procedure DecValue; overload;
-    procedure IncValue(IncSz : QWord); overload;
-    procedure DecValue(DecSz: QWord); overload;
-    property Value : QWord read GetValue write SetValue;
-  end;
+  TThreadUtf8String = class(specialize TThreadGetSetValue<UTF8String>);
+  TThreadWideString = class(specialize TThreadGetSetValue<WideString>);
 
   { TThreadPointer }
 
-  TThreadPointer = class(TThreadSafeObject)
-  private
-    FValue : Pointer;
-    function GetValue: Pointer;
+  TThreadPointer = class(specialize TThreadGetValue<Pointer>)
   public
     constructor Create(ASize : QWord);
     destructor Destroy; override;
     procedure Realloc(AValue : Pointer);
-    property Value : Pointer read GetValue;
-  end;
-
-  { TThreadUtf8String }
-
-  TThreadUtf8String = class(TThreadSafeObject)
-  private
-    FValue : Utf8String;
-    function GetValue: UTF8String;
-    procedure SetValue(const AValue: UTF8String);
-  public
-    constructor Create(const AValue : Utf8String);
-    property Value : UTF8String read GetValue write SetValue;
   end;
 
   { TThreadBoolean }
 
-  TThreadBoolean = class(TThreadSafeObject)
-  private
-    FValue : Boolean;
-    function GetValue: Boolean;
-    procedure SetValue(AValue: Boolean);
+  TThreadBoolean = class(specialize TThreadGetSetValue<Boolean>)
   public
-    constructor Create(AValue : Boolean);
     procedure Enable;
     procedure Disable;
-    property Value : Boolean read GetValue write SetValue;
-  end;
-
-  { TThreadWideString }
-
-  TThreadWideString = class(TThreadSafeObject)
-  private
-    FValue : WideString;
-    function GetValue: WideString;
-    procedure SetValue(const AValue: WideString);
-  public
-    constructor Create(const AValue : WideString);
-    property Value : WideString read GetValue write SetValue;
   end;
 
   { TThreadSafeAutoIncrementCardinal }
@@ -368,6 +341,78 @@ type
   end;
 
 implementation
+
+{ TThreadGetSetValue }
+
+procedure TThreadGetSetValue.SetValue(const AValue : T);
+begin
+  Lock;
+  try
+    FValue := AValue;
+  finally
+    UnLock;
+  end;
+end;
+
+{ TThreadGetValue }
+
+function TThreadGetValue.GetValue : T;
+begin
+  Lock;
+  try
+    Result := FValue;
+  finally
+    UnLock;
+  end;
+end;
+
+constructor TThreadGetValue.Create(const AValue : T);
+begin
+  inherited Create;
+  FValue := AValue;
+end;
+
+{ TThreadNumeric }
+
+procedure TThreadNumeric.IncValue;
+begin
+  Lock;
+  try
+    Inc(FValue);
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TThreadNumeric.DecValue;
+begin
+  Lock;
+  try
+    Dec(FValue);
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TThreadNumeric.IncValue(IncSz : T);
+begin
+  Lock;
+  try
+    Inc(FValue, IncSz);
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TThreadNumeric.DecValue(DecSz : T);
+begin
+  Lock;
+  try
+    Dec(FValue, DecSz);
+  finally
+    UnLock;
+  end;
+end;
 
 { TThreadSafeFastList }
 
@@ -547,19 +592,9 @@ end;
 
 { TThreadPointer }
 
-function TThreadPointer.GetValue: Pointer;
-begin
-  Lock;
-  try
-    Result := FValue;
-  finally
-    UnLock;
-  end;
-end;
-
 constructor TThreadPointer.Create(ASize: QWord);
 begin
-  Inherited Create;
+  Inherited Create(nil);
   FValue:= GetMem(ASize);
 end;
 
@@ -574,74 +609,6 @@ begin
   Lock;
   try
     FValue:= AValue;
-  finally
-    UnLock;
-  end;
-end;
-
-{ TThreadQWord }
-
-function TThreadQWord.GetValue: QWord;
-begin
-  Lock;
-  try
-    Result := FValue;
-  finally
-    UnLock;
-  end;
-end;
-
-procedure TThreadQWord.SetValue(AValue: QWord);
-begin
-  Lock;
-  try
-    FValue := AValue;
-  finally
-    UnLock;
-  end;
-end;
-
-constructor TThreadQWord.Create(AValue: QWord);
-begin
-  inherited Create;
-  FValue:= AValue;
-end;
-
-procedure TThreadQWord.IncValue;
-begin
-  Lock;
-  try
-    Inc(FValue);
-  finally
-    UnLock;
-  end;
-end;
-
-procedure TThreadQWord.DecValue;
-begin
-  Lock;
-  try
-    Dec(FValue);
-  finally
-    UnLock;
-  end;
-end;
-
-procedure TThreadQWord.IncValue(IncSz : QWord);
-begin
-  Lock;
-  try
-    Inc(FValue, IncSz);
-  finally
-    UnLock;
-  end;
-end;
-
-procedure TThreadQWord.DecValue(DecSz : QWord);
-begin
-  Lock;
-  try
-    Dec(FValue, DecSz);
   finally
     UnLock;
   end;
@@ -708,34 +675,6 @@ end;
 procedure THandlesList.Clear;
 begin
   FList.Clear;
-end;
-
-{ TThreadWideString }
-
-function TThreadWideString.GetValue: WideString;
-begin
-  Lock;
-  try
-    Result := FValue;
-  finally
-    UnLock;
-  end;
-end;
-
-procedure TThreadWideString.SetValue(const AValue : WideString);
-begin
-  Lock;
-  try
-    FValue := AValue;
-  finally
-    UnLock;
-  end;
-end;
-
-constructor TThreadWideString.Create(const AValue : WideString);
-begin
-  inherited Create;
-  FValue := AValue;
 end;
 
 { TThreadSafeFastCollection }
@@ -1362,32 +1301,6 @@ end;
 
 { TThreadBoolean }
 
-function TThreadBoolean.GetValue: Boolean;
-begin
-  Lock;
-  try
-    Result := FValue;
-  finally
-    UnLock;
-  end;
-end;
-
-procedure TThreadBoolean.SetValue(AValue: Boolean);
-begin
-  Lock;
-  try
-    FValue := AValue;
-  finally
-    UnLock;
-  end;
-end;
-
-constructor TThreadBoolean.Create(AValue: Boolean);
-begin
-  inherited Create;
-  FValue := AValue;
-end;
-
 procedure TThreadBoolean.Enable;
 begin
   Value := true;
@@ -1396,103 +1309,6 @@ end;
 procedure TThreadBoolean.Disable;
 begin
   Value := false;
-end;
-
-
-{ TThreadUtf8String }
-
-function TThreadUtf8String.GetValue: UTF8String;
-begin
-  Lock;
-  try
-    Result := FValue;
-  finally
-    UnLock;
-  end;
-end;
-
-procedure TThreadUtf8String.SetValue(const AValue : UTF8String);
-begin
-  Lock;
-  try
-    FValue := AValue;
-  finally
-    UnLock;
-  end;
-end;
-
-constructor TThreadUtf8String.Create(const AValue : Utf8String);
-begin
-  inherited Create;
-  FValue:= AValue;
-end;
-
-{ TThreadInteger }
-
-function TThreadInteger.GetValue: Integer;
-begin
-  Lock;
-  try
-    Result := FValue;
-  finally
-    UnLock;
-  end;
-end;
-
-procedure TThreadInteger.SetValue(AValue: Integer);
-begin
-  Lock;
-  try
-    FValue := AValue;
-  finally
-    UnLock;
-  end;
-end;
-
-constructor TThreadInteger.Create(AValue: Integer);
-begin
-  inherited Create;
-  FValue:= AValue;
-end;
-
-procedure TThreadInteger.IncValue;
-begin
-  Lock;
-  try
-    Inc(FValue);
-  finally
-    UnLock;
-  end;
-end;
-
-procedure TThreadInteger.DecValue;
-begin
-  Lock;
-  try
-    Dec(FValue);
-  finally
-    UnLock;
-  end;
-end;
-
-procedure TThreadInteger.IncValue(IncSz: Integer);
-begin
-  Lock;
-  try
-    Inc(FValue, IncSz);
-  finally
-    UnLock;
-  end;
-end;
-
-procedure TThreadInteger.DecValue(DecSz: Integer);
-begin
-  Lock;
-  try
-    Dec(FValue, DecSz);
-  finally
-    UnLock;
-  end;
 end;
 
 { TThreadStringList }
