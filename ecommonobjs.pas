@@ -178,7 +178,7 @@ type
 
   { TThreadSafeAutoIncrementCardinal }
 
-  TThreadSafeAutoIncrementCardinal = class(TNetCustomLockedObject)
+  TThreadSafeAutoIncrementCardinal = class(TThreadSafeObject)
   private
     FValue : Cardinal;
     function GetID: Cardinal;
@@ -228,22 +228,22 @@ type
     property OnChange : TNotifyEvent read GetOnChange write SetOnChange;
   end;
 
-  { TThreadSafeFastCollection }
+  { TThreadSafeFastBaseCollection }
 
-  TThreadSafeFastCollection = class(TThreadSafeObject)
+  generic TThreadSafeFastBaseCollection<T> = class(TThreadSafeObject)
   private
     FCollection :  TFastCollection;
 
     function GetCount: integer;
-    function GetObject(index : integer): TObject;
-    procedure SetObject(index : integer; AValue: TObject);
+    function GetObject(index : integer): T;
+    procedure SetObject(index : integer; AValue: T);
   protected
     procedure SetCount(AValue: integer); virtual;
   public
     constructor Create;
-    function Add(const Obj : TObject) : Integer; virtual;
-    function IndexOf(const Obj : TObject) : Integer;
-    function Remove(const obj: TObject) : integer; virtual;
+    function Add(const Obj : T) : Integer; virtual;
+    function IndexOf(const Obj : T) : Integer;
+    function Remove(const obj: T) : integer; virtual;
     procedure Delete(Ind : integer); virtual;
     procedure Clear; virtual;
     procedure Extract(Ind : integer); virtual;
@@ -252,25 +252,27 @@ type
     procedure SortList(func : TObjectSortFunction);
 
     property Count : integer read GetCount write SetCount;
-    property Item[index : integer] : TObject read GetObject write SetObject; default;
+    property Item[index : integer] : T read GetObject write SetObject; default;
   end;
 
-  { TThreadSafeFastList }
+  TThreadSafeFastCollection = class(specialize TThreadSafeFastBaseCollection<TObject>);
 
-  TThreadSafeFastList = class(TThreadSafeObject)
+  { TThreadSafeFastBaseList }
+
+  generic TThreadSafeFastBaseList<T> = class(TThreadSafeObject)
   private
     FList :  TFastList;
 
     function GetCount: integer;
-    function GetObject(index : integer): TObject;
-    procedure SetObject(index : integer; AValue: TObject);
+    function GetObject(index : integer): T;
+    procedure SetObject(index : integer; AValue: T);
   protected
     procedure SetCount(AValue: integer); virtual;
   public
     constructor Create;
-    function Add(const Obj : TObject) : Integer; virtual;
-    function IndexOf(const Obj : TObject) : Integer;
-    function Remove(const obj: TObject) : integer; virtual;
+    function Add(const Obj : T) : Integer; virtual;
+    function IndexOf(const Obj : T) : Integer;
+    function Remove(const obj: T) : integer; virtual;
     procedure Delete(Ind : integer); virtual;
     procedure Clear; virtual;
     procedure Extract(Ind : integer); virtual;
@@ -279,12 +281,14 @@ type
     procedure SortList(func : TObjectSortFunction);
 
     property Count : integer read GetCount write SetCount;
-    property Item[index : integer] : TObject read GetObject write SetObject; default;
+    property Item[index : integer] : T read GetObject write SetObject; default;
   end;
 
-  { TThreadSafeFastSeq }
+  TThreadSafeFastList = class(specialize TThreadSafeFastBaseList<TObject>);
 
-  TThreadSafeFastSeq = class(TThreadSafeObject)
+  { TThreadSafeFastBaseSeq }
+
+  generic TThreadSafeFastBaseSeq<T> = class(TThreadSafeObject)
   private
     FSeq : TFastSeq;
     function GetCount: integer;
@@ -297,14 +301,14 @@ type
     procedure Push_back(const O : TObject); virtual;
     procedure Push_front(const O : TObject); virtual;
     function Pop : TIteratorObject;
-    function PopValue : TObject;
+    function PopValue : T;
     function InsertBefore(loc: TIteratorObject; o: TObject): TIteratorObject; virtual;
     function InsertAfter(loc: TIteratorObject; o: TObject): TIteratorObject; virtual;
     procedure Erase(const loc : TIteratorObject);
     procedure EraseObject(const obj : TObject);
     function  EraseObjectsByCriteria(criteria: TFindObjectCriteria;
                                                data : pointer): Boolean;
-    function FindValue(criteria : TFindObjectCriteria; data : Pointer) : TObject;
+    function FindValue(criteria : TFindObjectCriteria; data : Pointer) : T;
     procedure DoForAll(action: TObjectAction);
     procedure DoForAllEx(action: TExObjectAction; data : Pointer);
     procedure Extract(const loc: TIteratorObject);
@@ -318,6 +322,8 @@ type
 
     property Count : integer read GetCount;
   end;
+
+  TThreadSafeFastSeq = class(specialize TThreadSafeFastBaseSeq<TObject>);
 
   { TReferencedStream }
 
@@ -414,9 +420,9 @@ begin
   end;
 end;
 
-{ TThreadSafeFastList }
+{ TThreadSafeFastBaseList }
 
-function TThreadSafeFastList.GetCount: integer;
+function TThreadSafeFastBaseList.GetCount: integer;
 begin
   Lock;
   try
@@ -426,17 +432,17 @@ begin
   end;
 end;
 
-function TThreadSafeFastList.GetObject(index: integer): TObject;
+function TThreadSafeFastBaseList.GetObject(index: integer): T;
 begin
   Lock;
   try
-    Result := FList[index];
+    Result := T(FList[index]);
   finally
     UnLock;
   end;
 end;
 
-procedure TThreadSafeFastList.SetObject(index: integer; AValue: TObject);
+procedure TThreadSafeFastBaseList.SetObject(index: integer; AValue: T);
 begin
   Lock;
   try
@@ -446,7 +452,7 @@ begin
   end;
 end;
 
-procedure TThreadSafeFastList.SetCount(AValue: integer);
+procedure TThreadSafeFastBaseList.SetCount(AValue: integer);
 begin
   Lock;
   try
@@ -456,13 +462,13 @@ begin
   end;
 end;
 
-constructor TThreadSafeFastList.Create;
+constructor TThreadSafeFastBaseList.Create;
 begin
   Inherited Create;
   FList := TFastList.Create;
 end;
 
-function TThreadSafeFastList.Add(const Obj: TObject): Integer;
+function TThreadSafeFastBaseList.Add(const Obj: T): Integer;
 begin
   Lock;
   try
@@ -472,7 +478,7 @@ begin
   end;
 end;
 
-function TThreadSafeFastList.IndexOf(const Obj: TObject): Integer;
+function TThreadSafeFastBaseList.IndexOf(const Obj: T): Integer;
 begin
   Lock;
   try
@@ -482,7 +488,7 @@ begin
   end;
 end;
 
-function TThreadSafeFastList.Remove(const obj: TObject): integer;
+function TThreadSafeFastBaseList.Remove(const obj: T): integer;
 begin
   Lock;
   try
@@ -492,7 +498,7 @@ begin
   end;
 end;
 
-procedure TThreadSafeFastList.Delete(Ind: integer);
+procedure TThreadSafeFastBaseList.Delete(Ind: integer);
 begin
   Lock;
   try
@@ -502,7 +508,7 @@ begin
   end;
 end;
 
-procedure TThreadSafeFastList.Clear;
+procedure TThreadSafeFastBaseList.Clear;
 begin
   Lock;
   try
@@ -512,7 +518,7 @@ begin
   end;
 end;
 
-procedure TThreadSafeFastList.Extract(Ind: integer);
+procedure TThreadSafeFastBaseList.Extract(Ind: integer);
 begin
   Lock;
   try
@@ -522,7 +528,7 @@ begin
   end;
 end;
 
-procedure TThreadSafeFastList.Pack;
+procedure TThreadSafeFastBaseList.Pack;
 begin
   Lock;
   try
@@ -532,13 +538,13 @@ begin
   end;
 end;
 
-destructor TThreadSafeFastList.Destroy;
+destructor TThreadSafeFastBaseList.Destroy;
 begin
   FList.Free;
   inherited Destroy;
 end;
 
-procedure TThreadSafeFastList.SortList(func: TObjectSortFunction);
+procedure TThreadSafeFastBaseList.SortList(func: TObjectSortFunction);
 begin
   Lock;
   try
@@ -677,9 +683,9 @@ begin
   FList.Clear;
 end;
 
-{ TThreadSafeFastCollection }
+{ TThreadSafeFastBaseCollection }
 
-function TThreadSafeFastCollection.GetCount: integer;
+function TThreadSafeFastBaseCollection.GetCount: integer;
 begin
   Lock;
   try
@@ -689,17 +695,17 @@ begin
   end;
 end;
 
-function TThreadSafeFastCollection.GetObject(index : integer): TObject;
+function TThreadSafeFastBaseCollection.GetObject(index : integer): T;
 begin
   Lock;
   try
-    Result := FCollection[index];
+    Result := T(FCollection[index]);
   finally
     UnLock;
   end;
 end;
 
-procedure TThreadSafeFastCollection.SetCount(AValue: integer);
+procedure TThreadSafeFastBaseCollection.SetCount(AValue: integer);
 begin
   Lock;
   try
@@ -709,7 +715,7 @@ begin
   end;
 end;
 
-procedure TThreadSafeFastCollection.SetObject(index: integer; AValue: TObject);
+procedure TThreadSafeFastBaseCollection.SetObject(index: integer; AValue: T);
 begin
   Lock;
   try
@@ -719,13 +725,13 @@ begin
   end;
 end;
 
-constructor TThreadSafeFastCollection.Create;
+constructor TThreadSafeFastBaseCollection.Create;
 begin
   inherited Create;
   FCollection := TFastCollection.Create;
 end;
 
-function TThreadSafeFastCollection.Add(const Obj: TObject): Integer;
+function TThreadSafeFastBaseCollection.Add(const Obj: T): Integer;
 begin
   Lock;
   try
@@ -735,7 +741,7 @@ begin
   end;
 end;
 
-function TThreadSafeFastCollection.IndexOf(const Obj: TObject): Integer;
+function TThreadSafeFastBaseCollection.IndexOf(const Obj: T): Integer;
 begin
   Lock;
   try
@@ -745,7 +751,7 @@ begin
   end;
 end;
 
-function TThreadSafeFastCollection.Remove(const obj: TObject): integer;
+function TThreadSafeFastBaseCollection.Remove(const obj: T): integer;
 begin
   Lock;
   try
@@ -755,7 +761,7 @@ begin
   end;
 end;
 
-procedure TThreadSafeFastCollection.Delete(Ind: integer);
+procedure TThreadSafeFastBaseCollection.Delete(Ind: integer);
 begin
   Lock;
   try
@@ -765,7 +771,7 @@ begin
   end;
 end;
 
-procedure TThreadSafeFastCollection.Clear;
+procedure TThreadSafeFastBaseCollection.Clear;
 begin
   Lock;
   try
@@ -775,7 +781,7 @@ begin
   end;
 end;
 
-procedure TThreadSafeFastCollection.Extract(Ind: integer);
+procedure TThreadSafeFastBaseCollection.Extract(Ind: integer);
 begin
   Lock;
   try
@@ -785,7 +791,7 @@ begin
   end;
 end;
 
-procedure TThreadSafeFastCollection.Pack;
+procedure TThreadSafeFastBaseCollection.Pack;
 begin
   Lock;
   try
@@ -795,13 +801,13 @@ begin
   end;
 end;
 
-destructor TThreadSafeFastCollection.Destroy;
+destructor TThreadSafeFastBaseCollection.Destroy;
 begin
   FCollection.Free;
   inherited Destroy;
 end;
 
-procedure TThreadSafeFastCollection.SortList(func: TObjectSortFunction);
+procedure TThreadSafeFastBaseCollection.SortList(func: TObjectSortFunction);
 begin
   Lock;
   try
@@ -913,9 +919,9 @@ begin
   end;
 end;
 
-{ TThreadSafeFastSeq }
+{ TThreadSafeFastBaseSeq }
 
-function TThreadSafeFastSeq.GetCount: integer;
+function TThreadSafeFastBaseSeq.GetCount: integer;
 begin
   Lock;
   try
@@ -925,19 +931,19 @@ begin
   end;
 end;
 
-constructor TThreadSafeFastSeq.Create;
+constructor TThreadSafeFastBaseSeq.Create;
 begin
   inherited Create;
   fSeq := TFastSeq.Create;
 end;
 
-destructor TThreadSafeFastSeq.Destroy;
+destructor TThreadSafeFastBaseSeq.Destroy;
 begin
   fseq.free;
   inherited Destroy;
 end;
 
-procedure TThreadSafeFastSeq.Clean;
+procedure TThreadSafeFastBaseSeq.Clean;
 begin
   Lock;
   try
@@ -947,7 +953,7 @@ begin
   end;
 end;
 
-procedure TThreadSafeFastSeq.ExtractAll;
+procedure TThreadSafeFastBaseSeq.ExtractAll;
 begin
   Lock;
   try
@@ -957,7 +963,7 @@ begin
   end;
 end;
 
-procedure TThreadSafeFastSeq.Push_back(const O: TObject);
+procedure TThreadSafeFastBaseSeq.Push_back(const O: TObject);
 begin
   Lock;
   try
@@ -967,7 +973,7 @@ begin
   end;
 end;
 
-procedure TThreadSafeFastSeq.Push_front(const O: TObject);
+procedure TThreadSafeFastBaseSeq.Push_front(const O: TObject);
 begin
   Lock;
   try
@@ -977,7 +983,7 @@ begin
   end;
 end;
 
-function TThreadSafeFastSeq.Pop: TIteratorObject;
+function TThreadSafeFastBaseSeq.Pop: TIteratorObject;
 begin
   Lock;
   try
@@ -987,17 +993,17 @@ begin
   end;
 end;
 
-function TThreadSafeFastSeq.PopValue: TObject;
+function TThreadSafeFastBaseSeq.PopValue: T;
 begin
   Lock;
   try
-    Result := FSeq.PopValue;
+    Result := T(FSeq.PopValue);
   finally
     UnLock;
   end;
 end;
 
-function TThreadSafeFastSeq.InsertBefore(loc: TIteratorObject; o: TObject
+function TThreadSafeFastBaseSeq.InsertBefore(loc: TIteratorObject; o: TObject
   ): TIteratorObject;
 begin
   Lock;
@@ -1008,7 +1014,7 @@ begin
   end;
 end;
 
-function TThreadSafeFastSeq.InsertAfter(loc: TIteratorObject; o: TObject
+function TThreadSafeFastBaseSeq.InsertAfter(loc: TIteratorObject; o: TObject
   ): TIteratorObject;
 begin
   Lock;
@@ -1019,7 +1025,7 @@ begin
   end;
 end;
 
-procedure TThreadSafeFastSeq.Erase(const loc: TIteratorObject);
+procedure TThreadSafeFastBaseSeq.Erase(const loc: TIteratorObject);
 begin
   Lock;
   try
@@ -1029,7 +1035,7 @@ begin
   end;
 end;
 
-procedure TThreadSafeFastSeq.EraseObject(const obj: TObject);
+procedure TThreadSafeFastBaseSeq.EraseObject(const obj: TObject);
 begin
   Lock;
   try
@@ -1039,7 +1045,7 @@ begin
   end;
 end;
 
-function TThreadSafeFastSeq.EraseObjectsByCriteria(
+function TThreadSafeFastBaseSeq.EraseObjectsByCriteria(
   criteria : TFindObjectCriteria; data : pointer) : Boolean;
 begin
   Lock;
@@ -1050,7 +1056,7 @@ begin
   end;
 end;
 
-function TThreadSafeFastSeq.FindValue(criteria : TFindObjectCriteria;
+function TThreadSafeFastBaseSeq.FindValue(criteria : TFindObjectCriteria;
   data : Pointer) : TObject;
 begin
   Lock;
@@ -1061,7 +1067,7 @@ begin
   end;
 end;
 
-procedure TThreadSafeFastSeq.DoForAll(action : TObjectAction);
+procedure TThreadSafeFastBaseSeq.DoForAll(action : TObjectAction);
 begin
   Lock;
   try
@@ -1071,8 +1077,8 @@ begin
   end;
 end;
 
-procedure TThreadSafeFastSeq.DoForAllEx(action : TExObjectAction; data : Pointer
-  );
+procedure TThreadSafeFastBaseSeq.DoForAllEx(action : TExObjectAction;
+  data : Pointer);
 begin
   Lock;
   try
@@ -1082,7 +1088,7 @@ begin
   end;
 end;
 
-procedure TThreadSafeFastSeq.Extract(const loc: TIteratorObject);
+procedure TThreadSafeFastBaseSeq.Extract(const loc: TIteratorObject);
 begin
   Lock;
   try
@@ -1092,7 +1098,7 @@ begin
   end;
 end;
 
-procedure TThreadSafeFastSeq.ExtractObject(const obj: TObject);
+procedure TThreadSafeFastBaseSeq.ExtractObject(const obj: TObject);
 begin
   Lock;
   try
@@ -1102,7 +1108,7 @@ begin
   end;
 end;
 
-function TThreadSafeFastSeq.ExtractObjectsByCriteria(
+function TThreadSafeFastBaseSeq.ExtractObjectsByCriteria(
   criteria : TFindObjectCriteria; afterextract : TObjectAction;
   data : pointer) : Boolean;
 begin
@@ -1114,7 +1120,7 @@ begin
   end;
 end;
 
-function TThreadSafeFastSeq.ListBegin: TIteratorObject;
+function TThreadSafeFastBaseSeq.ListBegin: TIteratorObject;
 begin
   Lock;
   try
@@ -1124,7 +1130,7 @@ begin
   end;
 end;
 
-function TThreadSafeFastSeq.IteratorBegin: TIterator;
+function TThreadSafeFastBaseSeq.IteratorBegin: TIterator;
 begin
   Lock;
   try
@@ -1134,7 +1140,7 @@ begin
   end;
 end;
 
-class function TThreadSafeFastSeq.ListEnd: TIteratorObject;
+class function TThreadSafeFastBaseSeq.ListEnd: TIteratorObject;
 begin
   Result := nil;
 end;

@@ -31,7 +31,7 @@ type
     FItemSize   : Byte;
     FItemShift  : Byte;
     type
-      TTypeList = array[0..MaxInt shl 4] of T;
+      TTypeList = array[0..MaxInt shr 4] of T;
       PTypeList = ^TTypeList;
     function Get(Index : Integer) : T;
     function GetList : PTypeList; inline;
@@ -119,7 +119,13 @@ type
   end;
 
   TKeyValuePair = packed record
+    {$IFDEF CPU64}
     Key : QWord;
+    {$ELSE}
+    {$IFDEF CPU32}
+    Key : DWord;
+    {$endif}
+    {$endif}
     case Byte of
     0: (Value: TObject);
     1: (PtrValue: Pointer);
@@ -128,8 +134,9 @@ type
     4: (PVar : PVariant);
   end;
 
-  TKeyValuePairKind = (kvpkObject, kvpkPointer, kvpkString,
-                       kvpkWideString, kvpkVariant);
+  TKeyValuePairKind = (kvpkObject, kvpkPointer,
+                       kvpkString, kvpkWideString,
+                       kvpkVariant);
 
   { TFastKeyValuePairList }
 

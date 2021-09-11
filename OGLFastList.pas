@@ -4,10 +4,6 @@
 
 unit OGLFastList;
 
-{$ifdef fpc}
-{$mode delphi}
-{$endif}
-
 interface
 
 type
@@ -162,6 +158,8 @@ type
     property Item[index : integer] : Pointer read GetPointer write SetPointer; default;
   end;
 
+  { TFastCollection }
+
   TFastCollection = class(TFastList)
   public
     procedure Extract(Ind : integer); override;
@@ -179,6 +177,30 @@ type
     procedure Clear; override;
     destructor Destroy; override;
   end;
+
+  {$ifdef fpc}
+
+  { TFastBaseCollection }
+
+  generic TFastBaseCollection<T> = class(TFastCollection)
+  private
+    function GetTObject(index : integer) : T;
+    procedure SetTObject(index : integer; Obj : T);
+  public
+    property Item[index : integer] : T read GetTObject write SetTObject; default;
+  end;
+
+  { TFastBaseList }
+
+  generic TFastBaseList<T> = class(TFastList)
+  private
+    function GetTObject(index : integer) : T;
+    procedure SetTObject(index : integer; Obj : T);
+  public
+    property Item[index : integer] : T read GetTObject write SetTObject; default;
+  end;
+  {$endif}
+
 
 implementation
 
@@ -276,6 +298,34 @@ Procedure QuickSort(numbers : PObjectList; size : Integer; func : TObjectSortFun
 Begin
 	QSort(numbers, 0, size-1, func);
 End;
+
+{$ifdef fpc}
+
+{ TFastBaseCollection }
+
+function TFastBaseCollection.GetTObject(index : integer) : T;
+begin
+  Result := T(GetObject(index));
+end;
+
+procedure TFastBaseCollection.SetTObject(index : integer; Obj : T);
+begin
+  SetObject(index, Obj);
+end;
+
+{ TFastBaseList }
+
+function TFastBaseList.GetTObject(index : integer) : T;
+begin
+  Result := T(GetObject(index));
+end;
+
+procedure TFastBaseList.SetTObject(index : integer; Obj : T);
+begin
+  SetObject(index, Obj);
+end;
+
+{$endif}
 
 { TFastDeq }
 
