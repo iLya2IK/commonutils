@@ -1057,11 +1057,11 @@ begin
 end;
 
 function TThreadSafeFastBaseSeq.FindValue(criteria : TFindObjectCriteria;
-  data : Pointer) : TObject;
+  data : Pointer) : T;
 begin
   Lock;
   try
-    Result := FSeq.FindValue(criteria, data);
+    Result := T(FSeq.FindValue(criteria, data));
   finally
     UnLock;
   end;
