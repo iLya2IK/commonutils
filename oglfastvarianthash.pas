@@ -20,8 +20,8 @@ type
   PFastHashItem=^TFastHashItem;
 
 const
-  MaxFastHashListSize = 128;
-  MaxFastHashTableSize = 128;
+  MaxFastHashListSize = 2048;
+  MaxFastHashTableSize = 2048;
   MaxFastItemsPerHash = 3;
 
 type
@@ -257,7 +257,7 @@ begin
   Result:=Self;
   if FCount < FCapacity then
     Exit;
-  IncSize:=SizeOf(PtrInt)*2;
+  IncSize:=SizeOf(PtrInt) shl 1;
   if FCapacity > 127 then
     Inc(IncSize, FCapacity shr 2)
   else if FCapacity > SizeOf(PtrInt)*3 then
