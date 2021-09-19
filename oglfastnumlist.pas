@@ -141,12 +141,12 @@ type
     function GetValue(aKey : QWord): TK;
     procedure SetValue(aKey : QWord; const AValue: TK);
   protected
-    procedure DisposeValue(Index : Integer); virtual; abstract;
-    function DoGetValue(aIndex : Integer) : TK; virtual;
+    function  DoGetValue(aIndex : Integer) : TK; virtual;
     procedure DoSetValue(aIndex : Integer; const AValue : TK); virtual;
-    procedure DeleteAll; override;
     function  DoCompare(Item1, Item2 : Pointer) : Integer; override;
+    procedure DisposeValue(Index : Integer); virtual; abstract;
     class function NullValue : TK; virtual; abstract;
+    procedure DeleteAll; override;
   public
     constructor Create(aFreeValues : Boolean = true); overload;
     destructor Destroy; override;
@@ -165,6 +165,17 @@ type
     procedure AddObjSorted(const aKey : QWord; aValue : TObject);
     procedure AddPtr(const aKey : QWord; aValue : Pointer);
     procedure AddPtrSorted(const aKey : QWord; aValue : Pointer);
+    { NB: all the PChars and PWideChars are completely copied in the AddStr
+      method not just assigned to the TKeyValuePair.Str/WideStr field.
+      This means that it is strongly recommended that you set the FreeValues
+      field to true if you assums to use the AddStr(QWord, PChar) and
+      AddWStr(QWord, PWideChar) methods.
+      If you do not want to create a new instance for the passed PChar or
+      PWideChar parameter, but to hold only the copy of that pointers in the
+      list, just use the AddPtr/AddPtrSorted methods.
+      To avoid that misunderstanding, this module does not have TFastMapPChar
+      and TFastMapPWideChar, and I recommend using TFastMapPtr to store pointers
+      to PChars and PWideChars.}
     procedure AddStr(const aKey : QWord; aValue : PChar);
     procedure AddStrSorted(const aKey : QWord; aValue : PChar);
     procedure AddStr(const aKey : QWord; const aValue : String); overload;
@@ -239,28 +250,6 @@ type
     procedure AddKeySorted(const aKey : QWord; const aValue : Variant); override;
   end;
 
-  { TFastMapPChar }
-
-  TFastMapPChar = class(specialize TFastKeyValuePairList<PChar>)
-  protected
-    procedure DisposeValue(Index : Integer); override;
-    class function NullValue : PChar; override;
-  public
-    procedure AddKey(const aKey : QWord; const aValue : PChar); override;
-    procedure AddKeySorted(const aKey : QWord; const aValue : PChar); override;
-  end;
-
-  { TFastMapPWideChar }
-
-  TFastMapPWideChar = class(specialize TFastKeyValuePairList<PWideChar>)
-  protected
-    procedure DisposeValue(Index : Integer); override;
-    class function NullValue : PWideChar; override;
-  public
-    procedure AddKey(const aKey : QWord; const aValue : PWideChar); override;
-    procedure AddKeySorted(const aKey : QWord; const aValue : PWideChar); override;
-  end;
-
   { TFastMapStr }
 
   TFastMapStr = class(specialize TFastKeyValuePairList<String>)
@@ -302,6 +291,48 @@ implementation
 
 uses Math;
 
+function AllocVariant(const aValue : Variant) : PVariant;
+begin
+  Result := AllocMem(SizeOf(Variant));
+  Result^ := aValue;
+end;
+
+function AllocString(const aValue : String) : PChar;
+var sl : Cardinal;
+begin
+  sl := Length(aValue);
+  Result := StrAlloc(sl + 1);
+  if sl > 0 then Move(aValue[1], Result^, sl);
+  Result[sl] := #0;
+end;
+
+function AllocWideString(const aValue : WideString) : PWideChar;
+var sl : Cardinal;
+begin
+  sl := Length(aValue);
+  Result := WideStrAlloc(sl + 1);
+  if sl > 0 then Move(aValue[1], Result^, sl shl 1);
+  Result[sl] := #0;
+end;
+
+function AllocChar(aValue : PChar) : PChar;
+var sl : Cardinal;
+begin
+  sl := strlen(aValue);
+  Result := StrAlloc(sl + 1);
+  if sl > 0 then Move(aValue^, Result^, sl);
+  Result[sl] := #0;
+end;
+
+function AllocWideChar(aValue : PWideChar) : PWideChar;
+var sl : Cardinal;
+begin
+  sl := strlen(aValue);
+  Result := WideStrAlloc(sl + 1);
+  if sl > 0 then Move(aValue^, Result^, sl shl 1);
+  Result[sl] := #0;
+end;
+
 function KeyValuePair(const aKey: QWord; aValue: PtrUInt): TKeyValuePair;
 begin
   Result.Key := aKey;
@@ -327,54 +358,37 @@ begin
 end;
 
 function KeyValuePair(const aKey : QWord; aValue : PChar) : TKeyValuePair;
-var sl : Cardinal;
 begin
   Result.Key := aKey;
-  sl := strlen(aValue)+1;
-  Result.Str := StrAlloc(sl);
-  if sl > 0 then Move(aValue^, Result.Str^, sl) else
-                 Result.Str[0] := #0;
+  Result.Str := AllocChar(aValue);
 end;
 
 function KeyValuePair(const aKey : QWord; aValue : PWideChar
   ) : TKeyValuePair;
-var sl : Cardinal;
 begin
   Result.Key := aKey;
-  sl := strlen(aValue)+1;
-  Result.WideStr := WideStrAlloc(sl);
-  if sl > 0 then Move(aValue^, Result.WideStr^, sl shl 1) else
-                 Result.WideStr[0] := #0;
+  Result.WideStr := AllocWideChar(aValue);
 end;
 
 function KeyValuePair(const aKey : QWord; const aValue : String
   ) : TKeyValuePair;
-var sl : Cardinal;
 begin
   Result.Key := aKey;
-  sl := Length(aValue);
-  Result.Str := StrAlloc(sl+1);
-  if sl > 0 then Move(aValue[1], Result.Str^, sl);
-  Result.Str[sl] := #0;
+  Result.Str := AllocString(aValue);
 end;
 
 function KeyValuePairWS(const aKey : QWord; const aValue : WideString
   ) : TKeyValuePair;
-var sl : Cardinal;
 begin
   Result.Key := aKey;
-  sl := Length(aValue);
-  Result.WideStr := WideStrAlloc(sl + 1);
-  if sl > 0 then Move(aValue[1], Result.WideStr^, sl shl 1);
-  Result.WideStr[sl] := #0;
+  Result.WideStr := AllocWideString(aValue);
 end;
 
 function KeyValuePairVar(const aKey : QWord; const aValue : Variant
   ) : TKeyValuePair;
 begin
   Result.Key := aKey;
-  Result.PVar := AllocMem(SizeOf(Variant));
-  Result.PVar^ := aValue;
+  Result.PVar := AllocVariant(aValue);
 end;
 
 function DoKeyValueCompare(Item1, Item2: Pointer): Integer;
@@ -415,7 +429,7 @@ end;
 
 procedure TFastMapWStr.DoSetValue(aIndex: Integer; const AValue: WideString);
 begin
-  PKeyValuePair(FBaseList)[aIndex].WideStr := KeyValuePairWS(0, aValue).WideStr;
+  PKeyValuePair(FBaseList)[aIndex].WideStr := AllocWideString(aValue);
 end;
 
 class function TFastMapWStr.NullValue: WideString;
@@ -448,7 +462,7 @@ end;
 
 procedure TFastMapStr.DoSetValue(aIndex: Integer; const AValue: String);
 begin
-  PKeyValuePair(FBaseList)[aIndex].Str := KeyValuePair(0, aValue).Str;
+  PKeyValuePair(FBaseList)[aIndex].Str := AllocString(aValue);
 end;
 
 class function TFastMapStr.NullValue: String;
@@ -466,49 +480,31 @@ begin
   AddStrSorted(aKey, aValue);
 end;
 
-{ TFastMapPWideChar }
+{ TFastMapUInt }
 
-procedure TFastMapPWideChar.DisposeValue(Index: Integer);
+procedure TFastMapUInt.DisposeValue({%H-}Index: Integer);
 begin
-  StrDispose(PKeyValuePair(FBaseList)[Index].WideStr);
+  // do nothing
 end;
 
-class function TFastMapPWideChar.NullValue: PWideChar;
+class function TFastMapUInt.NullValue: PtrUInt;
 begin
-  Result := nil;
+  Result := 0;
 end;
 
-procedure TFastMapPWideChar.AddKey(const aKey: QWord; const aValue: PWideChar);
+constructor TFastMapUInt.Create;
 begin
-  AddWStr(aKey, aValue);
+  inherited Create(false);
 end;
 
-procedure TFastMapPWideChar.AddKeySorted(const aKey: QWord;
-  const aValue: PWideChar);
+procedure TFastMapUInt.AddKey(const aKey: QWord; const aValue: PtrUInt);
 begin
-  AddWStrSorted(aKey, aValue);
+  AddUInt(aKey, AValue);
 end;
 
-{ TFastMapPChar }
-
-procedure TFastMapPChar.DisposeValue(Index: Integer);
+procedure TFastMapUInt.AddKeySorted(const aKey: QWord; const aValue: PtrUInt);
 begin
-  StrDispose(PKeyValuePair(FBaseList)[Index].Str);
-end;
-
-class function TFastMapPChar.NullValue: PChar;
-begin
-  Result := nil;
-end;
-
-procedure TFastMapPChar.AddKey(const aKey: QWord; const aValue: PChar);
-begin
-  AddStr(aKey, aValue);
-end;
-
-procedure TFastMapPChar.AddKeySorted(const aKey: QWord; const aValue: PChar);
-begin
-  AddStrSorted(aKey, aValue);
+  AddUIntSorted(aKey, AValue);
 end;
 
 { TFastMapInt }
@@ -575,7 +571,7 @@ end;
 
 procedure TFastMapVar.DoSetValue(aIndex: Integer; const AValue: Variant);
 begin
-  PKeyValuePair(FBaseList)[aIndex].PVar := KeyValuePairVar(0, AValue).PVar;
+  PKeyValuePair(FBaseList)[aIndex].PVar := AllocVariant(AValue);
 end;
 
 class function TFastMapVar.NullValue: Variant;
@@ -591,33 +587,6 @@ end;
 procedure TFastMapVar.AddKeySorted(const aKey: QWord; const aValue: Variant);
 begin
   AddVariantSorted(aKey, aValue);
-end;
-
-{ TFastMapUInt }
-
-procedure TFastMapUInt.DisposeValue({%H-}Index: Integer);
-begin
-  // do nothing
-end;
-
-class function TFastMapUInt.NullValue: PtrUInt;
-begin
-  Result := 0;
-end;
-
-constructor TFastMapUInt.Create;
-begin
-  inherited Create(false);
-end;
-
-procedure TFastMapUInt.AddKey(const aKey: QWord; const aValue: PtrUInt);
-begin
-  AddUInt(aKey, AValue);
-end;
-
-procedure TFastMapUInt.AddKeySorted(const aKey: QWord; const aValue: PtrUInt);
-begin
-  AddUIntSorted(aKey, AValue);
 end;
 
 { TFastMapObj }
@@ -676,7 +645,7 @@ begin
   if Index < 0 then
     AddKeySorted(aKey, AValue) else
   begin
-    DisposeValue(Index);
+    if FFreeValues then DisposeValue(Index);
     DoSetValue(Index, AValue);
   end;
 end;

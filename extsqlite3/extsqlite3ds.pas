@@ -194,13 +194,16 @@ type
                          sqlite_OpenNoFollow);
   TExtSqlite3OpenFlags = set of TExtSqlite3OpenFlag;
 
+  TSqlite3FuncCollection = class(specialize TFastBaseCollection<TSqlite3Function>);
+  TSqlite3PrepCollection = class(specialize TFastBaseCollection<TSqlite3Prepared>);
+
   { TExtSqlite3Dataset }
 
   TExtSqlite3Dataset = class(TCustomSqliteDataset)
   private
     FExtFlags : TExtSqlite3OpenFlags;
-    FFunctions : TFastCollection;
-    FPrepared  : TFastCollection;
+    FFunctions : TSqlite3FuncCollection;
+    FPrepared  : TSqlite3PrepCollection;
     FRTI: TRTLCriticalSection;
     FOpenMode  : TExtSqlite3OpenMode;
     FUniDirPrepared : Pointer;
@@ -794,7 +797,7 @@ begin
     begin
       For i := 0 to FFunctions.Count-1 do
       begin
-        TSqlite3Function(FFunctions[i]).Reconnect(aSqliteHandle);
+        FFunctions[i].Reconnect(aSqliteHandle);
       end;
     end;
   finally
@@ -811,7 +814,7 @@ begin
     begin
       For i := 0 to FPrepared.Count-1 do
       begin
-        TSqlite3Prepared(FPrepared[i]).Reconnect(aSqliteHandle);
+        FPrepared[i].Reconnect(aSqliteHandle);
       end;
     end;
   finally
@@ -893,7 +896,7 @@ begin
     begin
       For i := 0 to FPrepared.Count-1 do
       begin
-        TSqlite3Prepared(FPrepared[i]).Disconnect;
+        FPrepared[i].Disconnect;
       end;
     end;
   finally
@@ -922,8 +925,8 @@ begin
   inherited Create(AOwner);
   FOpenMode := eomNormal;
   FUniDirPrepared := nil;
-  FPrepared := TFastCollection.Create;
-  FFunctions := TFastCollection.Create;
+  FPrepared := TSqlite3PrepCollection.Create;
+  FFunctions := TSqlite3FuncCollection.Create;
   FDefaultStringSize := CustomSQLiteDS.DefaultStringSize;
   FOnPrepared := nil;
   FExtFlags := [sqlite_OpenReadWrite, sqlite_OpenCreate
@@ -972,7 +975,7 @@ procedure TExtSqlite3Dataset.ClearPrepared;
 var i : integer;
 begin
   for i := 0 to FPrepared.Count-1 do
-     TSqlite3Prepared(FPrepared[i]).Disconnect;
+     FPrepared[i].Disconnect;
   FPrepared.Clear;
 end;
 
