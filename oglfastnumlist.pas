@@ -34,6 +34,7 @@ type
     type
       TTypeList = array[0..MaxInt shr 4] of T;
       PTypeList = ^TTypeList;
+      PT        = ^T;
     function Get(Index : Integer) : T;
     function GetList : PTypeList; inline;
     // methods for sorted lists
@@ -119,8 +120,10 @@ type
     function  DoCompare(Item1, Item2 : Pointer) : Integer; override;
   end;
 
+  TKey = PtrUInt;
+
   TKeyValuePair = packed record
-    Key : PtrUInt;
+    Key : TKey;
     case Byte of
     0: (Value: TObject);
     1: (PtrValue: Pointer);
@@ -138,8 +141,8 @@ type
   private
     FFreeValues : Boolean;
     type PTK = ^TK;
-    function GetValue(aKey : QWord): TK;
-    procedure SetValue(aKey : QWord; const AValue: TK);
+    function GetValue(aKey : TKey): TK;
+    procedure SetValue(aKey : TKey; const AValue: TK);
   protected
     function  DoGetValue(aIndex : Integer) : TK; virtual;
     procedure DoSetValue(aIndex : Integer; const AValue : TK); virtual;
@@ -151,43 +154,46 @@ type
     constructor Create(aFreeValues : Boolean = true); overload;
     destructor Destroy; override;
 
+    function  IndexOfKey(aKey : TKey) : Integer; virtual;
+    function  IndexOfValue(const aValue : TK) : Integer; virtual;
+
     procedure Delete(Index: Integer); override;
     procedure DeleteItems(Index: Integer; nbVals: Cardinal); override;
 
-    procedure AddKey(const aKey : QWord; const aValue : TK); virtual; abstract;
-    procedure AddKeySorted(const aKey : QWord; const aValue : TK); virtual; abstract;
+    procedure AddKey(const aKey : TKey; const aValue : TK); virtual; abstract;
+    procedure AddKeySorted(const aKey : TKey; const aValue : TK); virtual; abstract;
 
-    procedure AddInt(const aKey : QWord; aValue : PtrInt);
-    procedure AddIntSorted(const aKey : QWord; aValue : PtrInt);
-    procedure AddUInt(const aKey : QWord; aValue : PtrUInt);
-    procedure AddUintSorted(const aKey : QWord; aValue : PtrUInt);
-    procedure AddObj(const aKey : QWord; aValue : TObject);
-    procedure AddObjSorted(const aKey : QWord; aValue : TObject);
-    procedure AddPtr(const aKey : QWord; aValue : Pointer);
-    procedure AddPtrSorted(const aKey : QWord; aValue : Pointer);
+    procedure AddInt(const aKey : TKey; aValue : PtrInt);
+    procedure AddIntSorted(const aKey : TKey; aValue : PtrInt);
+    procedure AddUInt(const aKey : TKey; aValue : PtrUInt);
+    procedure AddUintSorted(const aKey : TKey; aValue : PtrUInt);
+    procedure AddObj(const aKey : TKey; aValue : TObject);
+    procedure AddObjSorted(const aKey : TKey; aValue : TObject);
+    procedure AddPtr(const aKey : TKey; aValue : Pointer);
+    procedure AddPtrSorted(const aKey : TKey; aValue : Pointer);
     { NB: all the PChars and PWideChars are completely copied in the AddStr
       method not just assigned to the TKeyValuePair.Str/WideStr field.
       This means that it is strongly recommended that you set the FreeValues
-      field to true if you assums to use the AddStr(QWord, PChar) and
-      AddWStr(QWord, PWideChar) methods.
+      field to true if you assums to use the AddStr(TKey, PChar) and
+      AddWStr(TKey, PWideChar) methods.
       If you do not want to create a new instance for the passed PChar or
       PWideChar parameter, but to hold only the copy of that pointers in the
       list, just use the AddPtr/AddPtrSorted methods.
       To avoid that misunderstanding, this module does not have TFastMapPChar
       and TFastMapPWideChar, and I recommend using TFastMapPtr to store pointers
       to PChars and PWideChars.}
-    procedure AddStr(const aKey : QWord; aValue : PChar);
-    procedure AddStrSorted(const aKey : QWord; aValue : PChar);
-    procedure AddStr(const aKey : QWord; const aValue : String); overload;
-    procedure AddStrSorted(const aKey : QWord; const aValue : String); overload;
-    procedure AddWStr(const aKey : QWord; aValue : PWideChar);
-    procedure AddWStrSorted(const aKey : QWord; aValue : PWideChar);
-    procedure AddWStr(const aKey : QWord; const aValue : WideString); overload;
-    procedure AddWStrSorted(const aKey : QWord; const aValue : WideString); overload;
-    procedure AddVariant(const aKey : QWord; const aValue : Variant);
-    procedure AddVariantSorted(const aKey : QWord; const aValue : Variant);
+    procedure AddStr(const aKey : TKey; aValue : PChar);
+    procedure AddStrSorted(const aKey : TKey; aValue : PChar);
+    procedure AddStr(const aKey : TKey; const aValue : String); overload;
+    procedure AddStrSorted(const aKey : TKey; const aValue : String); overload;
+    procedure AddWStr(const aKey : TKey; aValue : PWideChar);
+    procedure AddWStrSorted(const aKey : TKey; aValue : PWideChar);
+    procedure AddWStr(const aKey : TKey; const aValue : WideString); overload;
+    procedure AddWStrSorted(const aKey : TKey; const aValue : WideString); overload;
+    procedure AddVariant(const aKey : TKey; const aValue : Variant);
+    procedure AddVariantSorted(const aKey : TKey; const aValue : Variant);
 
-    property Value[aKey : QWord] : TK read GetValue write SetValue;
+    property Value[aKey : TKey] : TK read GetValue write SetValue;
     property FreeValues : Boolean read FFreeValues write FFreeValues;
   end;
 
@@ -198,8 +204,8 @@ type
     procedure DisposeValue(Index : Integer); override;
     class function NullValue : TObject; override;
   public
-    procedure AddKey(const aKey : QWord; const aValue : TObject); override;
-    procedure AddKeySorted(const aKey : QWord; const aValue : TObject); override;
+    procedure AddKey(const aKey : TKey; const aValue : TObject); override;
+    procedure AddKeySorted(const aKey : TKey; const aValue : TObject); override;
   end;
 
   { TFastMapPtr }
@@ -209,8 +215,8 @@ type
     procedure DisposeValue(Index : Integer); override;
     class function NullValue : Pointer; override;
   public
-    procedure AddKey(const aKey : QWord; const aValue : Pointer); override;
-    procedure AddKeySorted(const aKey : QWord; const aValue : Pointer); override;
+    procedure AddKey(const aKey : TKey; const aValue : Pointer); override;
+    procedure AddKeySorted(const aKey : TKey; const aValue : Pointer); override;
   end;
 
   { TFastMapUInt }
@@ -221,8 +227,8 @@ type
     class function NullValue : PtrUInt; override;
   public
     constructor Create; overload;
-    procedure AddKey(const aKey : QWord; const aValue : PtrUInt); override;
-    procedure AddKeySorted(const aKey : QWord; const aValue : PtrUInt); override;
+    procedure AddKey(const aKey : TKey; const aValue : PtrUInt); override;
+    procedure AddKeySorted(const aKey : TKey; const aValue : PtrUInt); override;
   end;
 
   { TFastMapInt }
@@ -233,8 +239,8 @@ type
     class function NullValue : PtrInt; override;
   public
     constructor Create; overload;
-    procedure AddKey(const aKey : QWord; const aValue : PtrInt); override;
-    procedure AddKeySorted(const aKey : QWord; const aValue : PtrInt); override;
+    procedure AddKey(const aKey : TKey; const aValue : PtrInt); override;
+    procedure AddKeySorted(const aKey : TKey; const aValue : PtrInt); override;
   end;
 
   { TFastMapVar }
@@ -246,8 +252,8 @@ type
     procedure DoSetValue(aIndex : Integer; const AValue : Variant); override;
     class function NullValue : Variant; override;
   public
-    procedure AddKey(const aKey : QWord; const aValue : Variant); override;
-    procedure AddKeySorted(const aKey : QWord; const aValue : Variant); override;
+    procedure AddKey(const aKey : TKey; const aValue : Variant); override;
+    procedure AddKeySorted(const aKey : TKey; const aValue : Variant); override;
   end;
 
   { TFastMapStr }
@@ -259,8 +265,8 @@ type
     procedure DoSetValue(aIndex : Integer; const AValue : String); override;
     class function NullValue : String; override;
   public
-    procedure AddKey(const aKey : QWord; const aValue : String); override;
-    procedure AddKeySorted(const aKey : QWord; const aValue : String); override;
+    procedure AddKey(const aKey : TKey; const aValue : String); override;
+    procedure AddKeySorted(const aKey : TKey; const aValue : String); override;
   end;
 
   { TFastMapWStr }
@@ -272,19 +278,19 @@ type
     procedure DoSetValue(aIndex : Integer; const AValue : WideString); override;
     class function NullValue : WideString; override;
   public
-    procedure AddKey(const aKey : QWord; const aValue : WideString); override;
-    procedure AddKeySorted(const aKey : QWord; const aValue : WideString); override;
+    procedure AddKey(const aKey : TKey; const aValue : WideString); override;
+    procedure AddKeySorted(const aKey : TKey; const aValue : WideString); override;
   end;
 
-function KeyValuePair(const aKey : QWord; aValue : PtrUInt) : TKeyValuePair; overload;
-function KeyValuePair(const aKey : QWord; aValue : PtrInt) : TKeyValuePair; overload;
-function KeyValuePair(const aKey : QWord; aValue : TObject) : TKeyValuePair; overload;
-function KeyValuePair(const aKey : QWord; aValue : Pointer) : TKeyValuePair; overload;
-function KeyValuePair(const aKey : QWord; aValue : PChar) : TKeyValuePair; overload;
-function KeyValuePair(const aKey : QWord; aValue : PWideChar) : TKeyValuePair; overload;
-function KeyValuePair(const aKey : QWord; const aValue : String) : TKeyValuePair; overload;
-function KeyValuePairWS(const aKey : QWord; const aValue : WideString) : TKeyValuePair;
-function KeyValuePairVar(const aKey : QWord; const aValue : Variant) : TKeyValuePair;
+function KeyValuePair(const aKey : TKey; aValue : PtrUInt) : TKeyValuePair; overload;
+function KeyValuePair(const aKey : TKey; aValue : PtrInt) : TKeyValuePair; overload;
+function KeyValuePair(const aKey : TKey; aValue : TObject) : TKeyValuePair; overload;
+function KeyValuePair(const aKey : TKey; aValue : Pointer) : TKeyValuePair; overload;
+function KeyValuePair(const aKey : TKey; aValue : PChar) : TKeyValuePair; overload;
+function KeyValuePair(const aKey : TKey; aValue : PWideChar) : TKeyValuePair; overload;
+function KeyValuePair(const aKey : TKey; const aValue : String) : TKeyValuePair; overload;
+function KeyValuePairWS(const aKey : TKey; const aValue : WideString) : TKeyValuePair;
+function KeyValuePairVar(const aKey : TKey; const aValue : Variant) : TKeyValuePair;
 function DoKeyValueCompare(Item1, Item2 : Pointer) : Integer;
 
 implementation
@@ -333,58 +339,58 @@ begin
   Result[sl] := #0;
 end;
 
-function KeyValuePair(const aKey: QWord; aValue: PtrUInt): TKeyValuePair;
+function KeyValuePair(const aKey: TKey; aValue: PtrUInt): TKeyValuePair;
 begin
   Result.Key := aKey;
   Result.UIntValue := aValue;
 end;
 
-function KeyValuePair(const aKey: QWord; aValue: PtrInt): TKeyValuePair;
+function KeyValuePair(const aKey: TKey; aValue: PtrInt): TKeyValuePair;
 begin
   Result.Key := aKey;
   Result.IntValue := aValue;
 end;
 
-function KeyValuePair(const aKey : QWord; aValue : TObject) : TKeyValuePair;
+function KeyValuePair(const aKey : TKey; aValue : TObject) : TKeyValuePair;
 begin
   Result.Key := aKey;
   Result.Value := aValue;
 end;
 
-function KeyValuePair(const aKey : QWord; aValue : Pointer) : TKeyValuePair;
+function KeyValuePair(const aKey : TKey; aValue : Pointer) : TKeyValuePair;
 begin
   Result.Key := aKey;
   Result.PtrValue := aValue;
 end;
 
-function KeyValuePair(const aKey : QWord; aValue : PChar) : TKeyValuePair;
+function KeyValuePair(const aKey : TKey; aValue : PChar) : TKeyValuePair;
 begin
   Result.Key := aKey;
   Result.Str := AllocChar(aValue);
 end;
 
-function KeyValuePair(const aKey : QWord; aValue : PWideChar
+function KeyValuePair(const aKey : TKey; aValue : PWideChar
   ) : TKeyValuePair;
 begin
   Result.Key := aKey;
   Result.WideStr := AllocWideChar(aValue);
 end;
 
-function KeyValuePair(const aKey : QWord; const aValue : String
+function KeyValuePair(const aKey : TKey; const aValue : String
   ) : TKeyValuePair;
 begin
   Result.Key := aKey;
   Result.Str := AllocString(aValue);
 end;
 
-function KeyValuePairWS(const aKey : QWord; const aValue : WideString
+function KeyValuePairWS(const aKey : TKey; const aValue : WideString
   ) : TKeyValuePair;
 begin
   Result.Key := aKey;
   Result.WideStr := AllocWideString(aValue);
 end;
 
-function KeyValuePairVar(const aKey : QWord; const aValue : Variant
+function KeyValuePairVar(const aKey : TKey; const aValue : Variant
   ) : TKeyValuePair;
 begin
   Result.Key := aKey;
@@ -437,12 +443,12 @@ begin
   Result := '';
 end;
 
-procedure TFastMapWStr.AddKey(const aKey: QWord; const aValue: WideString);
+procedure TFastMapWStr.AddKey(const aKey: TKey; const aValue: WideString);
 begin
   AddWStr(aKey, aValue);
 end;
 
-procedure TFastMapWStr.AddKeySorted(const aKey: QWord; const aValue: WideString
+procedure TFastMapWStr.AddKeySorted(const aKey: TKey; const aValue: WideString
   );
 begin
   AddWStrSorted(aKey, aValue);
@@ -470,12 +476,12 @@ begin
   Result := '';
 end;
 
-procedure TFastMapStr.AddKey(const aKey: QWord; const aValue: String);
+procedure TFastMapStr.AddKey(const aKey: TKey; const aValue: String);
 begin
   AddStr(aKey, aValue);
 end;
 
-procedure TFastMapStr.AddKeySorted(const aKey: QWord; const aValue: String);
+procedure TFastMapStr.AddKeySorted(const aKey: TKey; const aValue: String);
 begin
   AddStrSorted(aKey, aValue);
 end;
@@ -497,12 +503,12 @@ begin
   inherited Create(false);
 end;
 
-procedure TFastMapUInt.AddKey(const aKey: QWord; const aValue: PtrUInt);
+procedure TFastMapUInt.AddKey(const aKey: TKey; const aValue: PtrUInt);
 begin
   AddUInt(aKey, AValue);
 end;
 
-procedure TFastMapUInt.AddKeySorted(const aKey: QWord; const aValue: PtrUInt);
+procedure TFastMapUInt.AddKeySorted(const aKey: TKey; const aValue: PtrUInt);
 begin
   AddUIntSorted(aKey, AValue);
 end;
@@ -524,12 +530,12 @@ begin
   inherited Create(false);
 end;
 
-procedure TFastMapInt.AddKey(const aKey: QWord; const aValue: PtrInt);
+procedure TFastMapInt.AddKey(const aKey: TKey; const aValue: PtrInt);
 begin
   AddInt(aKey, aValue);
 end;
 
-procedure TFastMapInt.AddKeySorted(const aKey: QWord; const aValue: PtrInt);
+procedure TFastMapInt.AddKeySorted(const aKey: TKey; const aValue: PtrInt);
 begin
   AddIntSorted(aKey, aValue);
 end;
@@ -546,12 +552,12 @@ begin
   Result := nil;
 end;
 
-procedure TFastMapPtr.AddKey(const aKey: QWord; const aValue: Pointer);
+procedure TFastMapPtr.AddKey(const aKey: TKey; const aValue: Pointer);
 begin
   AddPtr(aKey, aValue);
 end;
 
-procedure TFastMapPtr.AddKeySorted(const aKey: QWord; const aValue: Pointer);
+procedure TFastMapPtr.AddKeySorted(const aKey: TKey; const aValue: Pointer);
 begin
   AddPtrSorted(aKey, aValue);
 end;
@@ -579,12 +585,12 @@ begin
   Result := Null;
 end;
 
-procedure TFastMapVar.AddKey(const aKey: QWord; const aValue: Variant);
+procedure TFastMapVar.AddKey(const aKey: TKey; const aValue: Variant);
 begin
   AddVariant(aKey, aValue);
 end;
 
-procedure TFastMapVar.AddKeySorted(const aKey: QWord; const aValue: Variant);
+procedure TFastMapVar.AddKeySorted(const aKey: TKey; const aValue: Variant);
 begin
   AddVariantSorted(aKey, aValue);
 end;
@@ -601,12 +607,12 @@ begin
   Result := nil;
 end;
 
-procedure TFastMapObj.AddKey(const aKey: QWord; const aValue: TObject);
+procedure TFastMapObj.AddKey(const aKey: TKey; const aValue: TObject);
 begin
   AddObj(aKey, aValue);
 end;
 
-procedure TFastMapObj.AddKeySorted(const aKey: QWord; const aValue: TObject);
+procedure TFastMapObj.AddKeySorted(const aKey: TKey; const aValue: TObject);
 begin
   AddObjSorted(aKey, aValue);
 end;
@@ -629,19 +635,19 @@ begin
   PTK(FBaseList + aIndex shl FItemShift + SizeOf(PtrUInt))^ := AValue;
 end;
 
-function TFastKeyValuePairList.GetValue(aKey: QWord): TK;
+function TFastKeyValuePairList.GetValue(aKey: TKey): TK;
 var Index : Integer;
 begin
   Result := NullValue;
-  Index := IndexOf(KeyValuePair(aKey, nil));
+  Index := IndexOfKey(aKey);
   if Index >= 0 then
     Result := DoGetValue(Index);
 end;
 
-procedure TFastKeyValuePairList.SetValue(aKey: QWord; const AValue: TK);
+procedure TFastKeyValuePairList.SetValue(aKey: TKey; const AValue: TK);
 var Index : Integer;
 begin
-  Index := IndexOf(KeyValuePair(aKey, nil));
+  Index := IndexOfKey(aKey);
   if Index < 0 then
     AddKeySorted(aKey, AValue) else
   begin
@@ -670,6 +676,25 @@ begin
   inherited Destroy;
 end;
 
+function TFastKeyValuePairList.IndexOfKey(aKey: TKey): Integer;
+var KV : TKeyValuePair;
+begin
+  KV.Key := aKey; // no matter what is KV.Value, so it is undefined
+  Result := IndexOf(KV);
+end;
+
+function TFastKeyValuePairList.IndexOfValue(const aValue: TK): Integer;
+var i : integer;
+begin
+  // only direct search methods can be applyed
+  for i := 0 to Count-1 do
+  begin
+    if DoGetValue(i) = aValue then
+      Exit(i);
+  end;
+  Result := -1;
+end;
+
 procedure TFastKeyValuePairList.Delete(Index : Integer);
 begin
   if FreeValues then
@@ -686,100 +711,100 @@ begin
   inherited DeleteItems(Index, nbVals);
 end;
 
-procedure TFastKeyValuePairList.AddInt(const aKey: QWord; aValue: PtrInt);
+procedure TFastKeyValuePairList.AddInt(const aKey: TKey; aValue: PtrInt);
 begin
   Add(KeyValuePair(aKey, aValue));
 end;
 
-procedure TFastKeyValuePairList.AddIntSorted(const aKey: QWord; aValue: PtrInt);
+procedure TFastKeyValuePairList.AddIntSorted(const aKey: TKey; aValue: PtrInt);
 begin
   AddSorted(KeyValuePair(aKey, aValue));
 end;
 
-procedure TFastKeyValuePairList.AddUInt(const aKey: QWord; aValue: PtrUInt);
+procedure TFastKeyValuePairList.AddUInt(const aKey: TKey; aValue: PtrUInt);
 begin
   Add(KeyValuePair(aKey, aValue));
 end;
 
-procedure TFastKeyValuePairList.AddUintSorted(const aKey: QWord; aValue: PtrUInt);
+procedure TFastKeyValuePairList.AddUintSorted(const aKey: TKey; aValue: PtrUInt);
 begin
   AddSorted(KeyValuePair(aKey, aValue));
 end;
 
-procedure TFastKeyValuePairList.AddObj(const aKey : QWord; aValue : TObject);
+procedure TFastKeyValuePairList.AddObj(const aKey : TKey; aValue : TObject);
 begin
   Add(KeyValuePair(aKey, aValue));
 end;
 
-procedure TFastKeyValuePairList.AddObjSorted(const aKey : QWord;
+procedure TFastKeyValuePairList.AddObjSorted(const aKey : TKey;
   aValue : TObject);
 begin
   AddSorted(KeyValuePair(aKey, aValue));
 end;
 
-procedure TFastKeyValuePairList.AddPtr(const aKey : QWord; aValue : Pointer);
+procedure TFastKeyValuePairList.AddPtr(const aKey : TKey; aValue : Pointer);
 begin
   Add(KeyValuePair(aKey, aValue));
 end;
 
-procedure TFastKeyValuePairList.AddPtrSorted(const aKey : QWord;
+procedure TFastKeyValuePairList.AddPtrSorted(const aKey : TKey;
   aValue : Pointer);
 begin
   AddSorted(KeyValuePair(aKey, aValue));
 end;
 
-procedure TFastKeyValuePairList.AddStr(const aKey : QWord; aValue : PChar);
+procedure TFastKeyValuePairList.AddStr(const aKey : TKey; aValue : PChar);
 begin
   Add(KeyValuePair(aKey, aValue));
 end;
 
-procedure TFastKeyValuePairList.AddStrSorted(const aKey : QWord; aValue : PChar
+procedure TFastKeyValuePairList.AddStrSorted(const aKey : TKey; aValue : PChar
   );
 begin
   AddSorted(KeyValuePair(aKey, aValue));
 end;
 
-procedure TFastKeyValuePairList.AddStr(const aKey : QWord; const aValue : String);
+procedure TFastKeyValuePairList.AddStr(const aKey : TKey; const aValue : String);
 begin
   Add(KeyValuePair(aKey, aValue));
 end;
 
-procedure TFastKeyValuePairList.AddStrSorted(const aKey : QWord;
+procedure TFastKeyValuePairList.AddStrSorted(const aKey : TKey;
   const aValue : String);
 begin
   AddSorted(KeyValuePair(aKey, aValue));
 end;
 
-procedure TFastKeyValuePairList.AddWStr(const aKey : QWord; aValue : PWideChar);
+procedure TFastKeyValuePairList.AddWStr(const aKey : TKey; aValue : PWideChar);
 begin
   Add(KeyValuePair(aKey, aValue));
 end;
 
-procedure TFastKeyValuePairList.AddWStrSorted(const aKey : QWord;
+procedure TFastKeyValuePairList.AddWStrSorted(const aKey : TKey;
   aValue : PWideChar);
 begin
   AddSorted(KeyValuePair(aKey, aValue));
 end;
 
-procedure TFastKeyValuePairList.AddWStr(const aKey : QWord;
+procedure TFastKeyValuePairList.AddWStr(const aKey : TKey;
   const aValue : WideString);
 begin
   Add(KeyValuePairWS(aKey, aValue));
 end;
 
-procedure TFastKeyValuePairList.AddWStrSorted(const aKey : QWord;
+procedure TFastKeyValuePairList.AddWStrSorted(const aKey : TKey;
   const aValue : WideString);
 begin
   AddSorted(KeyValuePairWS(aKey, aValue));
 end;
 
-procedure TFastKeyValuePairList.AddVariant(const aKey : QWord;
+procedure TFastKeyValuePairList.AddVariant(const aKey : TKey;
   const aValue : Variant);
 begin
   Add(KeyValuePairVar(aKey, aValue));
 end;
 
-procedure TFastKeyValuePairList.AddVariantSorted(const aKey : QWord;
+procedure TFastKeyValuePairList.AddVariantSorted(const aKey : TKey;
   const aValue : Variant);
 begin
   AddSorted(KeyValuePairVar(aKey, aValue));
@@ -956,12 +981,12 @@ end;
 
 function TFastBaseNumericList.Get(Index : Integer) : T;
 begin
-  Result := PTypeList(FBaseList)^[Index];
+  Result := List^[Index];
 end;
 
 procedure TFastBaseNumericList.Put(Index : Integer; const AValue : T);
 begin
-  PTypeList(FBaseList)^[Index] := AValue;
+  List^[Index] := AValue;
 end;
 
 procedure TFastBaseNumericList.SetSorted(AValue : Boolean);

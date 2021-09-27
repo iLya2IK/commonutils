@@ -91,6 +91,65 @@ type
 
   TSqlite3Prepared = class;
 
+  TSqliteVariantArray = Array [0..MaxInt shr 8] of Variant;
+  PSqliteVariantArray = ^TSqliteVariantArray;
+
+  { TSqliteConsumeHolder }
+
+  TSqliteConsumeHolder = class
+  private
+    fvm : pointer;
+  public
+    constructor Create(aVm : Pointer);
+    procedure Consume(aCount : Int32); virtual; abstract;
+    property vm : Pointer read fvm;
+  end;
+
+  { TSqliteConsumeVarHolder }
+
+  TSqliteConsumeVarHolder = class(TSqliteConsumeHolder)
+  private
+    VarArray : PSqliteVariantArray;
+  public
+    constructor Create(aVm : Pointer; aVarArray : PSqliteVariantArray);
+    procedure Consume(aCount : Int32); override;
+  end;
+
+  { TSqliteConsumeStrHolder }
+
+  TSqliteConsumeStrHolder = class(TSqliteConsumeHolder)
+  private
+    Str : TStream;
+    WriteHeaders : Boolean;
+  public
+    constructor Create(aVm : Pointer; astr : TStream; aWriteHeaders : Boolean);
+    procedure Consume(aCount : Int32); override;
+  end;
+
+  { TSqliteConsumePtrHolder }
+
+  TSqliteConsumePtrHolder = class(TSqliteConsumeHolder)
+  private
+    Ptr : Pointer;
+    Sz : PtrInt;
+  public
+    constructor Create(aVm : Pointer; aPtr : Pointer; aSize : PtrInt);
+    procedure Consume(aCount : Int32); override;
+  end;
+
+  { TSqliteConsumeQueryHolder }
+
+  TSqliteConsumeQueryHolder = class(TSqliteConsumeHolder)
+  private
+    StrList : TStrings;
+    FillObjects : Boolean;
+    fRes : String;
+  public
+    constructor Create(aVm : Pointer; AStrList : TStrings; aFillObjects : Boolean);
+    procedure Consume({%H-}aCount : Int32); override;
+    property Res : String read fRes;
+  end;
+
   {TSqlite3PreparedHolder}
   TSqlite3PreparedHolder = class
   private
@@ -108,10 +167,14 @@ type
     procedure Reconnect(db : psqlite3);
     function BindParametres(const Params : Array of Const) : Boolean;
     function ReturnString : String;
+    function ExecTo(const Params : Array of Const; aCons : TSqliteConsumeHolder) : Boolean;
   public
     constructor Create(aOwner : TSqlite3Prepared);
     function QuickQuery(const Params : Array of Const; const AStrList: TStrings; FillObjects:Boolean): String;
     procedure Execute(const Params : Array of Const);
+    function ExecToValue(const Params : Array of Const; aValues : PSqliteVariantArray) : Boolean;
+    function ExecToValue(const Params : Array of Const; aValues : TStream; withHeaders : Boolean) : Boolean;
+    function ExecToValue(const Params : Array of Const; aValues : Pointer; aSize : PtrInt) : Boolean;
     procedure Disconnect;
     {$ifdef extra_prepared_thread_safe}
     procedure Lock; inline;
@@ -160,6 +223,14 @@ type
     function QuickQuery(const Params : Array of Const; const AStrList: TStrings; FillObjects:Boolean): String; virtual;
     procedure Execute(const Params : Array of Const); virtual;
     procedure Execute; overload;
+    function ExecToValue(const Params : Array of Const; aValues : PSqliteVariantArray) : Boolean;
+    function ExecToValue(const Params : Array of Const; aValues : TStream; withHeaders : Boolean) : Boolean; overload;
+    function ExecToValue(const Params : Array of Const; aValues : Pointer; aSize : PtrInt) : Boolean; overload;
+    function ExecToValue(const Params : Array of Const; var aValues) : Boolean; overload;
+    function ExecToValue(aValues : PSqliteVariantArray) : Boolean; overload;
+    function ExecToValue(aValues : TStream; withHeaders : Boolean) : Boolean; overload;
+    function ExecToValue(aValues : Pointer; aSize : PtrInt) : Boolean; overload;
+    function ExecToValue(var aValues) : Boolean; overload;
     procedure Disconnect; virtual;
     {$ifdef extra_prepared_thread_safe}
     procedure Lock; inline;
@@ -515,6 +586,79 @@ begin
   Execute([]);
 end;
 
+function TSqlite3Prepared.ExecToValue(const Params : array of const;
+  aValues : PSqliteVariantArray) : Boolean;
+begin
+  {$ifdef extra_prepared_thread_safe}
+  Lock;
+  try
+  {$endif}
+  Result := GetThreadHolder.ExecToValue(Params, aValues);
+  {$ifdef extra_prepared_thread_safe}
+  finally
+  UnLock;
+  end;
+  {$endif}
+end;
+
+function TSqlite3Prepared.ExecToValue(const Params : array of const;
+  aValues : TStream; withHeaders : Boolean) : Boolean;
+begin
+  {$ifdef extra_prepared_thread_safe}
+  Lock;
+  try
+  {$endif}
+  Result := GetThreadHolder.ExecToValue(Params, aValues, withHeaders);
+  {$ifdef extra_prepared_thread_safe}
+  finally
+  UnLock;
+  end;
+  {$endif}
+end;
+
+function TSqlite3Prepared.ExecToValue(const Params : array of const;
+  aValues : Pointer; aSize : PtrInt) : Boolean;
+begin
+  {$ifdef extra_prepared_thread_safe}
+  Lock;
+  try
+  {$endif}
+  Result := GetThreadHolder.ExecToValue(Params, aValues, aSize);
+  {$ifdef extra_prepared_thread_safe}
+  finally
+  UnLock;
+  end;
+  {$endif}
+end;
+
+function TSqlite3Prepared.ExecToValue(const Params : array of const; var aValues
+  ) : Boolean;
+begin
+  Result := ExecToValue(Params, @aValues, Sizeof(aValues));
+end;
+
+function TSqlite3Prepared.ExecToValue(aValues : PSqliteVariantArray) : Boolean;
+begin
+  Result := ExecToValue([], aValues);
+end;
+
+function TSqlite3Prepared.ExecToValue(aValues : TStream;
+                                              withHeaders : Boolean) : Boolean;
+begin
+  Result := ExecToValue([], aValues, withHeaders);
+end;
+
+function TSqlite3Prepared.ExecToValue(aValues : Pointer; aSize : PtrInt
+  ) : Boolean;
+begin
+  Result := ExecToValue([], aValues, aSize);
+end;
+
+function TSqlite3Prepared.ExecToValue(var aValues) : Boolean;
+begin
+  Result := ExecToValue([], @aValues, Sizeof(aValues));
+end;
+
 procedure TSqlite3Prepared.Disconnect;
 {$ifdef prepared_multi_holders}
 var it : Integer;
@@ -656,6 +800,28 @@ begin
   Result := FOwner.FOwner.GenReturnString(FReturnCode);
 end;
 
+function TSqlite3PreparedHolder.ExecTo(const Params : array of const;
+  aCons : TSqliteConsumeHolder) : Boolean;
+var c : integer;
+begin
+  if not ready then exit(False);
+  if not BindParametres(Params) then Exit(False);
+  FReturnCode := sqlite3_step(vm);
+  if (FReturnCode = SQLITE_ROW) then
+  begin
+    c := sqlite3_column_count(vm);
+    if c > 0 then
+    begin
+      if Assigned(aCons) then aCons.Consume(c);
+      Result := true;
+    end else
+      Result := false;
+  end else
+    Result := false;
+  sqlite3_reset(vm);
+  FOwner.DoPostExecute;
+end;
+
 constructor TSqlite3PreparedHolder.Create(aOwner: TSqlite3Prepared);
 begin
   FColumns := TStringList.Create;
@@ -669,42 +835,17 @@ end;
 
 function TSqlite3PreparedHolder.QuickQuery(const Params: array of const;
   const AStrList: TStrings; FillObjects: Boolean): String;
-procedure FillStrings;
+var aCons : TSqliteConsumeQueryHolder;
 begin
-  while FReturnCode = SQLITE_ROW do
-  begin
-    AStrList.Add(String(sqlite3_column_text(vm,0)));
-    FReturnCode := sqlite3_step(vm);
+  aCons := TSqliteConsumeQueryHolder.Create(vm, AStrList, FillObjects);
+  try
+    if ExecTo(Params, aCons) then
+      Result := aCons.Res
+    else
+      Result := '';
+  finally
+    aCons.Free;
   end;
-end;
-procedure FillStringsAndObjects;
-begin
-  while FReturnCode = SQLITE_ROW do
-  begin
-    AStrList.AddObject(String(sqlite3_column_text(vm, 0)),
-      TObject(PtrInt(sqlite3_column_int(vm, 1))));
-    FReturnCode := sqlite3_step(vm);
-  end;
-end;
-begin
-  if not ready then exit('');
-
-  if not BindParametres(Params) then Exit('');
-
-  FReturnCode := sqlite3_step(vm);
-  if (FReturnCode = SQLITE_ROW) and (sqlite3_column_count(vm) > 0) then
-  begin
-    Result := String(sqlite3_column_text(vm, 0));
-    if Assigned(AStrList) then
-    begin
-      if FillObjects and (sqlite3_column_count(vm) > 1) then
-        FillStringsAndObjects
-      else
-        FillStrings;
-    end;
-  end;
-  sqlite3_reset(vm);
-  FOwner.DoPostExecute;
 end;
 
 procedure TSqlite3PreparedHolder.Execute(const Params: array of const);
@@ -714,6 +855,42 @@ begin
   FReturnCode := sqlite3_step(vm);
   sqlite3_reset(vm);
   FOwner.DoPostExecute;
+end;
+
+function TSqlite3PreparedHolder.ExecToValue(const Params : array of const;
+  aValues : PSqliteVariantArray) : Boolean;
+var aCons : TSqliteConsumeVarHolder;
+begin
+  aCons := TSqliteConsumeVarHolder.Create(vm, aValues);
+  try
+    Result := ExecTo(Params, aCons)
+  finally
+    aCons.Free;
+  end;
+end;
+
+function TSqlite3PreparedHolder.ExecToValue(const Params : array of const;
+  aValues : TStream; withHeaders : Boolean) : Boolean;
+var aCons : TSqliteConsumeStrHolder;
+begin
+  aCons := TSqliteConsumeStrHolder.Create(vm, aValues, withHeaders);
+  try
+    Result := ExecTo(Params, aCons)
+  finally
+    aCons.Free;
+  end;
+end;
+
+function TSqlite3PreparedHolder.ExecToValue(const Params : array of const;
+  aValues : Pointer; aSize : PtrInt) : Boolean;
+var aCons : TSqliteConsumePtrHolder;
+begin
+  aCons := TSqliteConsumePtrHolder.Create(vm, aValues, aSize);
+  try
+    Result := ExecTo(Params, aCons)
+  finally
+    aCons.Free;
+  end;
 end;
 
 procedure TSqlite3PreparedHolder.Disconnect;
@@ -778,6 +955,169 @@ begin
   {$endif}
   FColumns.Free;
   inherited Destroy;
+end;
+
+{ TSqliteConsumeQueryHolder }
+
+constructor TSqliteConsumeQueryHolder.Create(aVm : Pointer;
+  AStrList : TStrings; aFillObjects : Boolean);
+begin
+  inherited Create(aVm);
+  StrList := AStrList;
+  FillObjects := aFillObjects;
+end;
+
+procedure TSqliteConsumeQueryHolder.Consume({%H-}aCount : Int32);
+var FReturnCode : Int32;
+
+procedure FillStrings;
+begin
+  while FReturnCode = SQLITE_ROW do
+  begin
+    StrList.Add(String(sqlite3_column_text(vm,0)));
+    FReturnCode := sqlite3_step(vm);
+  end;
+end;
+procedure FillStringsAndObjects;
+begin
+  while FReturnCode = SQLITE_ROW do
+  begin
+    StrList.AddObject(String(sqlite3_column_text(vm, 0)),
+    {$ifdef CPU64}
+      TObject(PtrInt(sqlite3_column_int64(vm, 1))));
+    {$else}
+      TObject(PtrInt(sqlite3_column_int(vm, 1))));
+    {$endif}
+    FReturnCode := sqlite3_step(vm);
+  end;
+end;
+
+begin
+  FReturnCode := SQLITE_ROW;
+  fRes := String(sqlite3_column_text(vm, 0));
+  if Assigned(StrList) then
+  begin
+    if FillObjects and (sqlite3_column_count(vm) > 1) then
+      FillStringsAndObjects
+    else
+      FillStrings;
+  end;
+end;
+
+{ TSqliteConsumePtrHolder }
+
+constructor TSqliteConsumePtrHolder.Create(aVm : Pointer; aPtr : Pointer;
+  aSize : PtrInt);
+begin
+  inherited Create(aVm);
+  Ptr := aPtr;
+  Sz := aSize;
+end;
+
+procedure TSqliteConsumePtrHolder.Consume(aCount : Int32);
+var
+  Str : TBufferedStream;
+  StrCons : TSqliteConsumeStrHolder;
+begin
+  Str := TBufferedStream.Create;
+  try
+    Str.SetPtr(Ptr, Sz);
+    StrCons := TSqliteConsumeStrHolder.Create(vm, Str, false);
+    try
+      StrCons.Consume(aCount);
+    finally
+      StrCons.Free;;
+    end;
+  finally
+    Str.Free;
+  end;
+end;
+
+{ TSqliteConsumeStrHolder }
+
+constructor TSqliteConsumeStrHolder.Create(aVm : Pointer; astr : TStream;
+  aWriteHeaders : Boolean);
+begin
+  inherited Create(aVm);
+  Str := astr;
+  WriteHeaders := aWriteHeaders;
+end;
+
+procedure TSqliteConsumeStrHolder.Consume(aCount : Int32);
+var i, t : int32;
+    i64 : Int64;
+    d : Double;
+    S : PChar;
+begin
+  if WriteHeaders then
+    Str.Write(aCount, SizeOf(int32));
+  for i := 0 to aCount-1 do
+  begin
+    t := sqlite3_column_type(vm, i);
+    if WriteHeaders then
+      Str.Write(t, SizeOf(int32));
+    case t of
+      SQLITE_INTEGER : begin
+        i64 := sqlite3_column_int64(vm, i);
+        if (i64 > Int64(High(Int32))) or
+           (i64 < Int64(Low(Int32))) then
+          Str.Write(i64, SizeOf(Int64)) else
+        begin
+          t := Int32(i64);
+          Str.Write(t, SizeOf(Int32));
+        end;
+      end;
+      SQLITE_FLOAT   : begin
+        d := sqlite3_column_double(vm, i);
+        Str.Write(d, sizeof(double));
+      end;
+      SQLITE_TEXT    : begin
+        S := sqlite3_column_text(vm, i);
+        t := strlen(S);
+        Str.Write(t, SizeOf(int32));
+        Str.Write(S^, t);
+      end;
+    end;
+  end;
+end;
+
+{ TSqliteConsumeVarHolder }
+
+constructor TSqliteConsumeVarHolder.Create(aVm : Pointer;
+  aVarArray : PSqliteVariantArray);
+begin
+  inherited Create(aVm);
+  VarArray := aVarArray;
+end;
+
+procedure TSqliteConsumeVarHolder.Consume(aCount : Int32);
+var i, t : integer;
+    i64 : Int64;
+begin
+  for i := 0 to aCount-1 do
+  begin
+    t := sqlite3_column_type(vm, i);
+    case t of
+      SQLITE_INTEGER : begin
+        i64 := sqlite3_column_int64(vm, i);
+        if (i64 > Int64(High(Int32))) or
+           (i64 < Int64(Low(Int32))) then
+          VarArray^[i] := i64 else
+          VarArray^[i] := Int32(i64);
+      end;
+      SQLITE_FLOAT   : VarArray^[i] := sqlite3_column_double(vm, i);
+      SQLITE_TEXT    : VarArray^[i] := String(sqlite3_column_text(vm, i));
+    else
+      VarArray^[i] := Null;
+    end;
+  end;
+end;
+
+{ TSqliteConsumeHolder }
+
+constructor TSqliteConsumeHolder.Create(aVm : Pointer);
+begin
+  fvm := aVm;
 end;
 
 { TExtSqlite3Dataset }
@@ -1059,7 +1399,11 @@ var
     while FReturnCode = SQLITE_ROW do
     begin
       AStrList.AddObject(String(sqlite3_column_text(vm, 0)),
+      {$ifdef CPU64}
+        TObject(PtrInt(sqlite3_column_int64(vm, 1))));
+      {$else}
         TObject(PtrInt(sqlite3_column_int(vm, 1))));
+      {$endif}
       FReturnCode := sqlite3_step(vm);
     end;
   end;

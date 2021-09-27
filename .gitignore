@@ -1,3 +1,5 @@
 /backup/
 /extsqlite3/backup/
 /lib/
+/TRegExpr/
+regexpr_*

@@ -16,7 +16,7 @@
     <Description Value="Set of Free Pascal units, used in several projects"/>
     <License Value="LGPL v2"/>
     <Version Major="1" Release="5" Build="12"/>
-    <Files Count="15">
+    <Files Count="17">
       <Item1>
         <Filename Value="bufferedstream.pas"/>
         <UnitName Value="BufferedStream"/>
@@ -58,25 +58,33 @@
         <UnitName Value="SortedThreadPool"/>
       </Item10>
       <Item11>
-        <Filename Value="extsqlite3/extsqlite3backup.pas"/>
-        <UnitName Value="ExtSqlite3Backup"/>
+        <Filename Value="exprcomparator.pas"/>
+        <UnitName Value="ExprComparator"/>
       </Item11>
       <Item12>
-        <Filename Value="extsqlite3/extsqlite3ds.pas"/>
-        <UnitName Value="ExtSqlite3DS"/>
+        <Filename Value="extsqlite3/extsqlite3backup.pas"/>
+        <UnitName Value="ExtSqlite3Backup"/>
       </Item12>
       <Item13>
-        <Filename Value="extsqlite3/extsqlite3funcs.pas"/>
-        <UnitName Value="extsqlite3funcs"/>
+        <Filename Value="extsqlite3/extsqlite3ds.pas"/>
+        <UnitName Value="ExtSqlite3DS"/>
       </Item13>
       <Item14>
-        <Filename Value="extsqlite3/sqlitelogger.pas"/>
-        <UnitName Value="sqlitelogger"/>
+        <Filename Value="extsqlite3/extsqlite3funcs.pas"/>
+        <UnitName Value="extsqlite3funcs"/>
       </Item14>
       <Item15>
+        <Filename Value="extsqlite3/sqlitelogger.pas"/>
+        <UnitName Value="sqlitelogger"/>
+      </Item15>
+      <Item16>
         <Filename Value="extsqlite3/sqlitewebsession.pas"/>
         <UnitName Value="sqlitewebsession"/>
-      </Item15>
+      </Item16>
+      <Item17>
+        <Filename Value="extsqlite3/exprsqlite3funcs.pas"/>
+        <UnitName Value="ExprSqlite3Funcs"/>
+      </Item17>
     </Files>
     <RequiredPkgs Count="1">
       <Item1>
