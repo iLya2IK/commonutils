@@ -1,6 +1,6 @@
 {
  ExprSqlite3Funcs:
-   Set of functions for expression processing to use with 
+   Set of functions for expression processing to use with
    ExtSqlite3DS.TExtSqlite3Dataset
 
    Copyright (c) 2021 by Ilya Medvedkov
@@ -53,8 +53,33 @@ type
     procedure ScalarFunc(argc : integer); override;
   end;
 
+  { TExprRegFunction }
+
+  TExprRegFunction = class(TSqlite3Function)
+  public
+    constructor Create;
+    procedure ScalarFunc(argc : integer); override;
+  end;
+
 
 implementation
+
+{ TExprRegFunction }
+
+constructor TExprRegFunction.Create;
+begin
+  inherited Create('regexpr', 2, sqlteUtf8, sqlfScalar);
+end;
+
+procedure TExprRegFunction.ScalarFunc(argc: integer);
+var B : Boolean;
+begin
+  if (argc = 2) then begin
+    B := SinRegExpr(AsString(0), AsString(1));
+    SetResult(Integer(B));
+  end else
+    SetResult(null);
+end;
 
 { TExprCrossHitContFunction }
 
@@ -159,4 +184,3 @@ begin
 end;
 
 end.
-

@@ -1,11 +1,11 @@
 {
  ExtSqlite3DS:
-   Extension of CustomSqliteDataset module to use sqlite preparation 
+   Extension of CustomSqliteDataset module to use sqlite preparation
    objects and functions. Added faster routes for unidirectional viewing.
 
    Part of ESolver project
 
-   Copyright (c) 2019-2020 by Ilya Medvedkov
+   Copyright (c) 2019-2021 by Ilya Medvedkov
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -1955,4 +1955,3 @@ begin
 end;
 
 end.
-
