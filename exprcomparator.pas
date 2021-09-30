@@ -301,21 +301,23 @@ end;
 
 function TSinExpr.Contain(aE: TSinExpr): Single;
 var i, j, k : integer;
-    v : Single;
+    v, v0 : Single;
 begin
   if aE.Count = 0 then Exit(1);
 
   Result := 1;
   i := 0;
+  v0 := 1.0 / single(aE.count);
   while i <= (Count - aE.Count) do
   begin
     v := 0;
     k := 0;
     for j := i to (i + aE.Count - 1) do
     begin
-      v := Math.Max(Token[i].Compare(aE.Token[k]), v);
+      v := v + Token[j].Compare(aE.Token[k]);
       inc(k);
     end;
+    v := v * v0;
     if Result > v then Result := v;
     Inc(i);
   end;
@@ -341,22 +343,23 @@ var i, j, k, C : integer;
     Excludes : Array of Boolean;
 begin
   if (Count = 0) or (aE.Count = 0) then Exit(1);
+  if aE.Count = 1 then Exit(Contain(aE));
 
-  SetLength(Excludes, aE.Count);
-  FillByte(Excludes[0], aE.Count, 0);
+  SetLength(Excludes, Count);
+  FillByte(Excludes[0], Count, 0);
 
   C := 0;
   Result := 0;
-  for i := 0 to Count-1 do
-  if (minWordLen < Token[i].UTF8TokenLength) then
+  for i := 0 to aE.Count-1 do
+  if (minWordLen < aE.Token[i].UTF8TokenLength) then
   begin
     bv := 1.0;
     k := -1;
-    for j := 0 to aE.Count-1 do
+    for j := 0 to Count-1 do
     if not Excludes[j] then
-    if (minWordLen < aE.Token[j].UTF8TokenLength) then
+    if (minWordLen < Token[j].UTF8TokenLength) then
     begin
-      v := Token[i].Compare(aE.Token[j]);
+      v := Token[j].Compare(aE.Token[i]);
       if v < bv then begin
         bv := v;
         k := j;

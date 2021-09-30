@@ -34,7 +34,6 @@ type
     type
       TTypeList = array[0..MaxInt shr 4] of T;
       PTypeList = ^TTypeList;
-      PT        = ^T;
     function Get(Index : Integer) : T;
     function GetList : PTypeList; inline;
     // methods for sorted lists
@@ -141,7 +140,7 @@ type
   private
     FFreeValues : Boolean;
     type PTK = ^TK;
-    function GetValue(aKey : TKey): TK;
+    function  GetValue(aKey : TKey): TK;
     procedure SetValue(aKey : TKey; const AValue: TK);
   protected
     function  DoGetValue(aIndex : Integer) : TK; virtual;
@@ -627,12 +626,12 @@ end;
 
 function TFastKeyValuePairList.DoGetValue(aIndex : Integer) : TK;
 begin
-  Result := PTK(FBaseList + aIndex shl FItemShift + SizeOf(PtrUInt))^;
+  Result := PTK(@(List^[aIndex].Value))^;
 end;
 
 procedure TFastKeyValuePairList.DoSetValue(aIndex : Integer; const AValue : TK);
 begin
-  PTK(FBaseList + aIndex shl FItemShift + SizeOf(PtrUInt))^ := AValue;
+  PTK(@(List^[aIndex].Value))^ := AValue;
 end;
 
 function TFastKeyValuePairList.GetValue(aKey: TKey): TK;

@@ -15,7 +15,7 @@
     </CompilerOptions>
     <Description Value="Set of Free Pascal units, used in several projects"/>
     <License Value="LGPL v2"/>
-    <Version Major="1" Release="5" Build="12"/>
+    <Version Major="1" Release="6" Build="12"/>
     <Files Count="17">
       <Item1>
         <Filename Value="bufferedstream.pas"/>
