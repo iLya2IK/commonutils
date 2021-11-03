@@ -43,6 +43,9 @@ uses
 {$endif}
 
 type
+  TSqlite3Function = class;
+  TSqlite3FunctionClass = class of TSqlite3Function;
+
   TSqlite3FuncStyle = (sqlfScalar, sqlfAggregate);
   TSqlite3TextEncode = ( sqlteUtf8,
                          sqlteUtf16LE,
@@ -50,6 +53,8 @@ type
                          sqlteUtf16,
                          sqlteAny,
                          sqlteUtf16_ALIGNED );
+  TSqlite3FuncArgType = (sqlatInt, sqlatInt64, sqlatFloat, sqlatString,
+                                   sqlatBlob, sqlatNull);
 
   { TSqlite3Function }
   TSqlite3Function = class
@@ -70,15 +75,31 @@ type
     constructor Create(const aName : String; aParCnt : Integer; aTextEncode : TSqlite3TextEncode;
       aFuncStyle : TSqlite3FuncStyle; isDeterministic : Boolean = true);
     destructor Destroy; override;
+    function Compare(aFuncClass : TSqlite3FunctionClass;
+                                const {%H-}aParams : Array of const) : Boolean; virtual;
 
     function GetAggregateContext(aSize : integer) : Pointer;
 
-    procedure SetResult(res : Variant);
+    procedure SetResult(const res : ShortInt); overload;
+    procedure SetResult(const res : Byte); overload;
+    procedure SetResult(const res : SmallInt); overload;
+    procedure SetResult(const res : Word); overload;
+    procedure SetResult(const res : Int32); overload;
+    procedure SetResult(const res : Cardinal); overload;
+    procedure SetResult(const res : QWord); overload;
+    procedure SetResult(const res : Int64); overload;
+    procedure SetResult(const res : Single); overload;
+    procedure SetResult(const res : Double); overload;
+    procedure SetResult(const res : String); overload;
+    procedure SetResult(const res : WideString); overload;
+    procedure SetResultNil;
     function  GetArgument(arg : Integer) : Variant;
+    function  GetArgumentType(arg : Integer) : TSqlite3FuncArgType;
     function AsInt(arg : Integer) : Integer;
     function AsInt64(arg : Integer) : Int64;
     function AsDouble(arg : Integer) : Double;
     function AsString(arg : Integer) : String;
+    function AsPChar(arg : Integer) : PChar;
     function AsNull({%H-}arg : integer) : Pointer;
 
     procedure ScalarFunc({%H-}argc : integer); virtual;
@@ -150,10 +171,13 @@ type
     property Res : String read fRes;
   end;
 
+  TSqlitePrepOpenMode = (pomAutoFillColumns, pomDirect);
+
   {TSqlite3PreparedHolder}
   TSqlite3PreparedHolder = class
   private
     FOwner      : TSqlite3Prepared;
+    FOpenMode   : TSqlitePrepOpenMode;
     FColumns    : TStringList;
     vm          : pointer;
     FReturnCode : integer;
@@ -161,9 +185,16 @@ type
     {$ifdef extra_prepared_thread_safe}
     FRTI        : TRTLCriticalSection;
     {$endif}
+    function DoOpen(const Params: array of const;
+      aMode : TSqlitePrepOpenMode) : Boolean;
     procedure ConsumeColumns;
     function GetColumn(Index : Integer): String;
     function GetColumnCount: Integer;
+    function GetColumnDouble(Index : Integer): Double;
+    function GetColumnInt32(Index : Integer): Int32;
+    function GetColumnInt64(Index : Integer): Int64;
+    function GetColumnPChar(Index : Integer) : PChar;
+    function GetColumnString(Index : Integer): String;
     procedure Reconnect(db : psqlite3);
     function BindParametres(const Params : Array of Const) : Boolean;
     function ReturnString : String;
@@ -181,12 +212,18 @@ type
     procedure UnLock; inline;
     {$endif}
     function Open(const Params: array of Const): Boolean;
+    function OpenDirect(const Params: array of Const): Boolean;
     function Step : Boolean;
     procedure Close;
     destructor Destroy; override;
 
     property ColumnCount : integer read GetColumnCount;
     property Columns[Index : Integer] : String read GetColumn;
+    property AsDouble[Index : Integer] : Double read GetColumnDouble;
+    property AsString[Index : Integer] : String read GetColumnString;
+    property AsPChar[Index : Integer] : PChar read GetColumnPChar;
+    property AsInt32[Index : Integer] : Int32 read GetColumnInt32;
+    property AsInt64[Index : Integer] : Int64 read GetColumnInt64;
   end;
 
   {$ifdef prepared_multi_holders}
@@ -207,9 +244,14 @@ type
   private
     FExpr       : String;
     FOnPostExecute : TNotifyEvent;
+    function GetColumnPChar(Index : Integer) : PChar;
     function GetThreadHolder : TSqlite3PreparedHolder;{$ifndef prepared_multi_holders}inline;{$endif}
     function GetColumn(Index : Integer): String;
     function GetColumnCount: integer;
+    function GetColumnDouble(Index : Integer): Double;
+    function GetColumnInt32(Index : Integer): Int32;
+    function GetColumnInt64(Index : Integer): Int64;
+    function GetColumnString(Index : Integer): String;
     procedure Reconnect(db : psqlite3);
     function  DoBindParametres({%H-}const Params : Array of Const) : Boolean; virtual;
     procedure DoPostExecute;
@@ -237,12 +279,19 @@ type
     procedure UnLock; inline;
     {$endif}
     function Open(const Params: array of const): Boolean;
+    function OpenDirect(const Params: array of Const): Boolean;
     function Step : Boolean;
     procedure Close;
     destructor Destroy; override;
 
     property ColumnCount : integer read GetColumnCount;
     property Columns[Index : Integer] : String read GetColumn;
+    property AsDouble[Index : Integer] : Double read GetColumnDouble;
+    property AsPChar[Index : Integer] : PChar read GetColumnPChar;
+    property AsString[Index : Integer] : String read GetColumnString;
+    property AsInt32[Index : Integer] : Int32 read GetColumnInt32;
+    property AsInt64[Index : Integer] : Int64 read GetColumnInt64;
+
     property OnPostExecute : TNotifyEvent read FOnPostExecute write FOnPostExecute;
   end;
 
@@ -305,6 +354,9 @@ type
     function AddNewPrep(const aSQL: String{$ifdef prepared_multi_holders};
       ThreadCnt : SmallInt = -1 {$endif}): TSqlite3Prepared;
     procedure ClearPrepared;
+
+    function FindFunction(aFuncClass : TSqlite3FunctionClass;
+                                     const aParams : Array of const) : TSqlite3Function;
 
     procedure ExecuteDirect(const ASQL: String); override;
     function QuickQuery(const ASQL: String; const AStrList: TStrings; FillObjects: Boolean): String; override;
@@ -496,6 +548,32 @@ begin
   Result := GetThreadHolder.ColumnCount;
 end;
 
+function TSqlite3Prepared.GetColumnDouble(Index: Integer): Double;
+begin
+  Result := GetThreadHolder.AsDouble[index];
+end;
+
+function TSqlite3Prepared.GetColumnInt32(Index: Integer): Int32;
+begin
+  Result := GetThreadHolder.AsInt32[index];
+end;
+
+function TSqlite3Prepared.GetColumnInt64(Index: Integer): Int64;
+begin
+  Result := GetThreadHolder.AsInt64[index];
+end;
+
+function TSqlite3Prepared.GetColumnString(Index: Integer): String;
+begin
+  Result := GetThreadHolder.AsString[index];
+end;
+
+
+function TSqlite3Prepared.GetColumnPChar(Index : Integer) : PChar;
+begin
+  Result := GetThreadHolder.AsPChar[index];
+end;
+
 procedure TSqlite3Prepared.Reconnect(db : psqlite3);
 {$ifdef prepared_multi_holders}
 var it : integer;
@@ -679,6 +757,11 @@ begin
   Result := GetThreadHolder.Open(Params);
 end;
 
+function TSqlite3Prepared.OpenDirect(const Params: array of const): Boolean;
+begin
+  Result := GetThreadHolder.OpenDirect(Params);
+end;
+
 function TSqlite3Prepared.Step : Boolean;
 begin
   Result := GetThreadHolder.Step;
@@ -729,6 +812,31 @@ end;
 function TSqlite3PreparedHolder.GetColumnCount : Integer;
 begin
   Result := FColumns.Count;
+end;
+
+function TSqlite3PreparedHolder.GetColumnDouble(Index : Integer): Double;
+begin
+  Result := sqlite3_column_double(vm,Index);
+end;
+
+function TSqlite3PreparedHolder.GetColumnInt32(Index : Integer): Int32;
+begin
+  Result := sqlite3_column_int(vm,Index);
+end;
+
+function TSqlite3PreparedHolder.GetColumnInt64(Index : Integer): Int64;
+begin
+  Result := sqlite3_column_int64(vm,Index);
+end;
+
+function TSqlite3PreparedHolder.GetColumnPChar(Index : Integer) : PChar;
+begin
+  Result := sqlite3_column_text(vm,Index);
+end;
+
+function TSqlite3PreparedHolder.GetColumnString(Index : Integer): String;
+begin
+  Result := String(sqlite3_column_text(vm,Index));
 end;
 
 function TSqlite3PreparedHolder.BindParametres(const Params: array of const): Boolean;
@@ -790,9 +898,7 @@ procedure TSqlite3PreparedHolder.ConsumeColumns;
 var i : integer;
 begin
   for i := 0 to ColumnCount-1 do
-  begin
     FColumns[i] :=String(sqlite3_column_text(vm,i));
-  end;
 end;
 
 function TSqlite3PreparedHolder.ReturnString: String;
@@ -827,6 +933,7 @@ begin
   FColumns := TStringList.Create;
   FOwner := aOwner;
   ready:= false;
+  FOpenMode := pomAutoFillColumns;
   vm := nil;
   {$ifdef extra_prepared_thread_safe}
   InitCriticalSection(FRTI);
@@ -911,9 +1018,12 @@ begin
 end;
 {$endif}
 
-function TSqlite3PreparedHolder.Open(const Params: array of const) : Boolean;
+function TSqlite3PreparedHolder.DoOpen(const Params: array of const;
+  aMode : TSqlitePrepOpenMode) : Boolean;
 var C, i : integer;
 begin
+  FOpenMode := aMode;
+
   Result := false;
   if not ready then exit;
   if not BindParametres(Params) then Exit;
@@ -925,11 +1035,25 @@ begin
     C := sqlite3_column_count(vm);
     if C > 0 then
     begin
-      for i := 1 to C do FColumns.Add('');
-      ConsumeColumns;
+      if aMode = pomAutoFillColumns then
+      begin
+        for i := 1 to C do FColumns.Add('');
+        ConsumeColumns;
+      end;
       Result := true;
     end;
   end;
+end;
+
+function TSqlite3PreparedHolder.Open(const Params: array of const) : Boolean;
+begin
+  Result := DoOpen(Params, pomAutoFillColumns);
+end;
+
+function TSqlite3PreparedHolder.OpenDirect(
+  const Params: array of const): Boolean;
+begin
+  Result := DoOpen(Params, pomDirect);
 end;
 
 function TSqlite3PreparedHolder.Step: Boolean;
@@ -937,7 +1061,8 @@ begin
   FReturnCode := sqlite3_step(vm);
   if (FReturnCode = SQLITE_ROW) then
   begin
-    ConsumeColumns;
+    if FOpenMode = pomAutoFillColumns then
+      ConsumeColumns;
     Result := true;
   end else
     Result := false;
@@ -1270,8 +1395,7 @@ begin
   FDefaultStringSize := CustomSQLiteDS.DefaultStringSize;
   FOnPrepared := nil;
   FExtFlags := [sqlite_OpenReadWrite, sqlite_OpenCreate
-                {$ifdef prepared_multi_holders}, sqlite_OpenNoMutex{$endif}
-                ];
+                {$ifdef prepared_multi_holders}, sqlite_OpenNoMutex{$endif}];
   InitCriticalSection(FRTI);
 end;
 
@@ -1317,6 +1441,17 @@ begin
   for i := 0 to FPrepared.Count-1 do
      FPrepared[i].Disconnect;
   FPrepared.Clear;
+end;
+
+function TExtSqlite3Dataset.FindFunction(aFuncClass : TSqlite3FunctionClass;
+  const aParams : array of const) : TSqlite3Function;
+var i : integer;
+begin
+  for i := 0 to FFunctions.Count-1 do
+  begin
+    if FFunctions[i].Compare(aFuncClass, aParams) then Exit(FFunctions[i]);
+  end;
+  Result := nil;
 end;
 
 function TExtSqlite3Dataset.GetFieldData(Field: TField; Buffer: Pointer;
@@ -1860,22 +1995,82 @@ begin
   inherited Destroy;
 end;
 
+function TSqlite3Function.Compare(aFuncClass : TSqlite3FunctionClass;
+  const {%H-}aParams : array of const) : Boolean;
+begin
+  Result := Self is aFuncClass;
+end;
+
 function TSqlite3Function.GetAggregateContext(aSize: integer): Pointer;
 begin
   Result := sqlite3_aggregate_context(FContext, aSize);
 end;
 
-procedure TSqlite3Function.SetResult(res: Variant);
+procedure TSqlite3Function.SetResult(const res: ShortInt);
 begin
-  case VarType(res) of
-    varempty, varnull, varunknown : sqlite3_result_null(FContext);
-    varsmallint, varinteger,
-       varboolean, varshortint,
-       varbyte, varword, varlongword : sqlite3_result_int(FContext, Integer(res));
-    varstring, varustring, varolestr : sqlite3_result_text(FContext, pcharstr(res), length(res), @freebindstring);
-    varsingle, vardouble : sqlite3_result_double(FContext, Double(res));
-    varword64, varint64 : sqlite3_result_int64(FContext, Int64(res));
-  end;
+  sqlite3_result_int(FContext, Integer(res))
+end;
+
+procedure TSqlite3Function.SetResult(const res: Byte);
+begin
+  sqlite3_result_int(FContext, Integer(res))
+end;
+
+procedure TSqlite3Function.SetResult(const res: SmallInt);
+begin
+  sqlite3_result_int(FContext, Integer(res))
+end;
+
+procedure TSqlite3Function.SetResult(const res: Word);
+begin
+  sqlite3_result_int(FContext, Integer(res))
+end;
+
+procedure TSqlite3Function.SetResult(const res: Int32);
+begin
+  sqlite3_result_int(FContext, Integer(res))
+end;
+
+procedure TSqlite3Function.SetResult(const res: Cardinal);
+begin
+  sqlite3_result_int(FContext, Integer(res))
+end;
+
+procedure TSqlite3Function.SetResult(const res: QWord);
+begin
+  sqlite3_result_int64(FContext, res)
+end;
+
+procedure TSqlite3Function.SetResult(const res: Int64);
+begin
+  sqlite3_result_int64(FContext, res)
+end;
+
+procedure TSqlite3Function.SetResult(const res: Single);
+begin
+  sqlite3_result_double(FContext, Double(res))
+end;
+
+procedure TSqlite3Function.SetResult(const res: Double);
+begin
+  sqlite3_result_double(FContext, res)
+end;
+
+procedure TSqlite3Function.SetResult(const res: String);
+begin
+  sqlite3_result_text(FContext, pcharstr(res), length(res), @freebindstring);
+end;
+
+procedure TSqlite3Function.SetResult(const res: WideString);
+var t : String;
+begin
+  t := UTF8Encode(res);
+  sqlite3_result_text(FContext, pcharstr(t), length(t), @freebindstring);
+end;
+
+procedure TSqlite3Function.SetResultNil;
+begin
+  sqlite3_result_null(FContext);
 end;
 
 function TSqlite3Function.GetArgument(arg: Integer): Variant;
@@ -1888,6 +2083,21 @@ begin
     //SQLITE_BLOB     :
     SQLITE_NULL     : Result := AsNull(arg);
     SQLITE3_TEXT    : Result := AsString(arg);
+  end;
+end;
+
+function TSqlite3Function.GetArgumentType(arg : Integer) : TSqlite3FuncArgType;
+var tp : Cardinal;
+begin
+  tp := sqlite3_value_type(FArguments[arg]);
+  case tp of
+    SQLITE_INTEGER  : Result := sqlatInt;
+    SQLITE_FLOAT    : Result := sqlatFloat;
+    SQLITE_BLOB     : Result := sqlatBlob;
+    SQLITE_NULL     : Result := sqlatNull;
+    SQLITE3_TEXT    : Result := sqlatString;
+  else
+    Result := sqlatNull;
   end;
 end;
 
@@ -1909,6 +2119,11 @@ end;
 function TSqlite3Function.AsString(arg: Integer): String;
 begin
   result := StrPas(sqlite3_value_text(FArguments[arg]));
+end;
+
+function TSqlite3Function.AsPChar(arg : Integer) : PChar;
+begin
+  result := sqlite3_value_text(FArguments[arg]);
 end;
 
 function TSqlite3Function.AsNull({%H-}arg: integer): Pointer;
