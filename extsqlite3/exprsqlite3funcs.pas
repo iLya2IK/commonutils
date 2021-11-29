@@ -101,9 +101,13 @@ type
     constructor Create(aUID : Cardinal; aDB : TExtSqlite3Dataset);
     procedure InitStates(const aTblName, aKeyField, aValField: String); virtual; overload;
     procedure InitStates(const aTblName, aKeyField, aValField, aSinExprField: String); virtual; overload;
-    property UID : Cardinal read FUID;
+    procedure Synchronize; virtual;
+    property  UID : Cardinal read FUID;
     property  SinExprField : String read FSinExprField;
   end;
+
+  TProtoSinExprsClass = class of TProtoSinExprs;
+  TBaseSinExprsClass = class of TBaseSinExprs;
 
   { TSinIndexedExprs }
 
@@ -140,7 +144,7 @@ type
   public
     constructor Create(aUID : Cardinal; aDB : TExtSqlite3Dataset);
     destructor Destroy; override;
-    procedure Synchronize; virtual;
+    procedure Synchronize; override;
     procedure Lock;
     procedure UnLock;
     procedure AddExpr(aKey : TKey; const aExpr : String);
@@ -277,9 +281,7 @@ begin
 
     func := FDBDataset.FindFunction(TTokenSinFunction, []);
     if not assigned(func) then
-    begin
       FDBDataset.AddFunction(TTokenSinFunction.Create);
-    end;
 
     FDBDataset.ExecSQL('DROP TRIGGER IF EXISTS update_' + idname);
     FDBDataset.ExecSQL('DROP TRIGGER IF EXISTS insert_' + idname);
@@ -317,11 +319,9 @@ begin
 end;
 
 procedure TTokenSinFunction.ScalarFunc(argc : integer);
-var str_expr : String;
-    expr : TSinExpr;
+var expr : TSinExpr;
 begin
-  str_expr := AsString(0);
-  expr := TSinExpr.Create(str_expr);
+  expr := TSinExpr.Create(AsString(0));
   try
     SetResult(expr.SaveToString);
   finally
@@ -381,6 +381,11 @@ procedure TBaseSinExprs.InitStates(const aTblName, aKeyField, aValField,
   aSinExprField : String);
 begin
   InternalInitStates(aTblName, aKeyField, aValField, aSinExprField);
+end;
+
+procedure TBaseSinExprs.Synchronize;
+begin
+  //donothing
 end;
 
 { TBaseSinIndexedExprs }

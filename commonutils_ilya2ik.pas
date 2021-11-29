@@ -11,7 +11,8 @@ uses
   BufferedStream, extmemorystream, ECommonObjs, gwidgetsethelper, gzstream, 
   kcThreadPool, OGLFastList, OGLFastNumList, OGLFastVariantHash, OGLB64Utils, 
   SortedThreadPool, ExprComparator, ExtSqlite3Backup, ExtSqlite3DS, 
-  extsqlite3funcs, sqlitelogger, sqlitewebsession, ExprSqlite3Funcs;
+  extsqlite3funcs, sqlitelogger, sqlitewebsession, ExprSqlite3Funcs, 
+  ExtSqliteUtils;
 
 implementation
 

@@ -20,12 +20,13 @@ interface
 
 uses
   Classes, SysUtils, StrUtils,
-  db,
+  ctypes, db,
   OGLFastList,
   BufferedStream,
   variants,
   {$IFDEF LOAD_DYNAMICALLY}
   SQLite3Dyn,
+  DynLibs,
   {$ELSE}
   SQLite3,
   {$ENDIF}
@@ -123,7 +124,7 @@ type
   public
     constructor Create(aVm : Pointer);
     procedure Consume(aCount : Int32); virtual; abstract;
-    property vm : Pointer read fvm;
+    property vm : Pointer read fvm write fvm;
   end;
 
   { TSqliteConsumeVarHolder }
@@ -332,6 +333,7 @@ type
     procedure ConsumeRow(aRecord : PPAnsiChar; ColumnCount : integer);
     procedure SetDefaultStringSize(AValue: Integer);
     procedure DoRequestPrepared(const aRequest : String; aResult : Integer);
+    function ExecTo(const ASQL: String; aCons : TSqliteConsumeHolder) : Boolean;
   protected
     procedure BuildLinkedList; override;
     function GetLastInsertRowId: Int64; override;
@@ -360,6 +362,9 @@ type
 
     procedure ExecuteDirect(const ASQL: String); override;
     function QuickQuery(const ASQL: String; const AStrList: TStrings; FillObjects: Boolean): String; override;
+    function ExecToValue(const ASQL: String; aValues : PSqliteVariantArray) : Boolean;
+    function ExecToValue(const ASQL: String; aValues : Pointer; aSize : PtrInt) : Boolean;
+    function ExecToValue(const ASQL: String; var aValues) : Boolean; overload;
 
     procedure Open(aMode : TExtSqlite3OpenMode); overload;
     function  GetFieldData(Field: TField; Buffer: Pointer; NativeFormat: Boolean): Boolean; override;
@@ -379,50 +384,10 @@ type
     property OnPrepared : TExtSqlite3OnPrepared read FOnPrepared write FOnPrepared;
   end;
 
-  function SqliteCode2Str(Code: Integer): String;
 
 implementation
 
-{$ifdef prepared_multi_holders}
-const DEFAULT_THREAD_HOLDER_CNT = 1;
-{$endif}
-
-function SqliteCode2Str(Code: Integer): String;
-begin
-  case Code of
-    SQLITE_OK           : Result := 'SQLITE_OK';
-    SQLITE_ERROR        : Result := 'SQLITE_ERROR';
-    SQLITE_INTERNAL     : Result := 'SQLITE_INTERNAL';
-    SQLITE_PERM         : Result := 'SQLITE_PERM';
-    SQLITE_ABORT        : Result := 'SQLITE_ABORT';
-    SQLITE_BUSY         : Result := 'SQLITE_BUSY';
-    SQLITE_LOCKED       : Result := 'SQLITE_LOCKED';
-    SQLITE_NOMEM        : Result := 'SQLITE_NOMEM';
-    SQLITE_READONLY     : Result := 'SQLITE_READONLY';
-    SQLITE_INTERRUPT    : Result := 'SQLITE_INTERRUPT';
-    SQLITE_IOERR        : Result := 'SQLITE_IOERR';
-    SQLITE_CORRUPT      : Result := 'SQLITE_CORRUPT';
-    SQLITE_NOTFOUND     : Result := 'SQLITE_NOTFOUND';
-    SQLITE_FULL         : Result := 'SQLITE_FULL';
-    SQLITE_CANTOPEN     : Result := 'SQLITE_CANTOPEN';
-    SQLITE_PROTOCOL     : Result := 'SQLITE_PROTOCOL';
-    SQLITE_EMPTY        : Result := 'SQLITE_EMPTY';
-    SQLITE_SCHEMA       : Result := 'SQLITE_SCHEMA';
-    SQLITE_TOOBIG       : Result := 'SQLITE_TOOBIG';
-    SQLITE_CONSTRAINT   : Result := 'SQLITE_CONSTRAINT';
-    SQLITE_MISMATCH     : Result := 'SQLITE_MISMATCH';
-    SQLITE_MISUSE       : Result := 'SQLITE_MISUSE';
-    SQLITE_NOLFS        : Result := 'SQLITE_NOLFS';
-    SQLITE_AUTH         : Result := 'SQLITE_AUTH';
-    SQLITE_FORMAT       : Result := 'SQLITE_FORMAT';
-    SQLITE_RANGE        : Result := 'SQLITE_RANGE';
-    SQLITE_ROW          : Result := 'SQLITE_ROW';
-    SQLITE_NOTADB       : Result := 'SQLITE_NOTADB';
-    SQLITE_DONE         : Result := 'SQLITE_DONE';
-  else
-    Result := 'Unknown Return Value';
-  end;
-end;
+uses ExtSqliteUtils;
 
 function GetAutoIncValue(NextValue: Pointer; {%H-}Columns: Integer;
   ColumnValues: PPAnsiChar; {%H-}ColumnNames: PPAnsiChar): Integer; cdecl;
@@ -913,15 +878,20 @@ begin
   if not ready then exit(False);
   if not BindParametres(Params) then Exit(False);
   FReturnCode := sqlite3_step(vm);
-  if (FReturnCode = SQLITE_ROW) then
+  if (FReturnCode = SQLITE_ROW) or
+     (FReturnCode = SQLITE_DONE) then
   begin
-    c := sqlite3_column_count(vm);
-    if c > 0 then
+    if Assigned(aCons) and
+       (FReturnCode = SQLITE_ROW) then
     begin
-      if Assigned(aCons) then aCons.Consume(c);
-      Result := true;
-    end else
-      Result := false;
+      c := sqlite3_column_count(vm);
+      if c > 0 then
+      begin
+        aCons.Consume(c);
+        Result := true;
+      end else
+        Result := false;
+    end else Result := true;
   end else
     Result := false;
   sqlite3_reset(vm);
@@ -1339,7 +1309,7 @@ begin
   FReturnCode := sqlite3_prepare_v2(Result, CheckFileSql, -1, @vm, nil);
   if FReturnCode <> SQLITE_OK then
   begin
-    ErrorStr := SqliteCode2Str(FReturnCode) + ' - ' + sqlite3_errmsg(Result);
+    ErrorStr := sqluCode2Str(FReturnCode) + ' - ' + sqlite3_errmsg(Result);
     sqlite3_close(Result);
     DatabaseError(ErrorStr, Self);
   end;
@@ -1500,75 +1470,53 @@ begin
 end;
 
 procedure TExtSqlite3Dataset.ExecuteDirect(const ASQL: String);
-var
-  vm: Pointer;
 begin
-  Lock;
-  try
-    FReturnCode := sqlite3_prepare_v2(FSqliteHandle, PAnsiChar(ASQL), -1, @vm, nil);
-    DoRequestPrepared(ASQL, FReturnCode);
-    if FReturnCode <> SQLITE_OK then
-      DatabaseError(ReturnString, Self);
-    FReturnCode := sqlite3_step(vm);
-    sqlite3_finalize(vm);
-  finally
-    UnLock;
-  end;
+  ExecTo(ASQL, nil);
 end;
 
 function TExtSqlite3Dataset.QuickQuery(const ASQL: String;
   const AStrList: TStrings; FillObjects: Boolean): String;
-var
-  vm: Pointer;
-
-  procedure FillStrings;
-  begin
-    while FReturnCode = SQLITE_ROW do
-    begin
-      AStrList.Add(String(sqlite3_column_text(vm,0)));
-      FReturnCode := sqlite3_step(vm);
-    end;
-  end;
-  procedure FillStringsAndObjects;
-  begin
-    while FReturnCode = SQLITE_ROW do
-    begin
-      AStrList.AddObject(String(sqlite3_column_text(vm, 0)),
-      {$ifdef CPU64}
-        TObject(PtrInt(sqlite3_column_int64(vm, 1))));
-      {$else}
-        TObject(PtrInt(sqlite3_column_int(vm, 1))));
-      {$endif}
-      FReturnCode := sqlite3_step(vm);
-    end;
-  end;
+var aCons : TSqliteConsumeQueryHolder;
 begin
-  Lock;
+  aCons := TSqliteConsumeQueryHolder.Create(nil, AStrList, FillObjects);
   try
-    if FSqliteHandle = nil then
-      GetSqliteHandle;
-    Result := '';
-    FReturnCode := sqlite3_prepare_v2(FSqliteHandle,PAnsiChar(ASQL), -1, @vm, nil);
-    DoRequestPrepared(ASQL, FReturnCode);
-    if FReturnCode <> SQLITE_OK then
-      DatabaseError(ReturnString, Self);
-
-    FReturnCode := sqlite3_step(vm);
-    if (FReturnCode = SQLITE_ROW) and (sqlite3_column_count(vm) > 0) then
-    begin
-      Result := String(sqlite3_column_text(vm, 0));
-      if AStrList <> nil then
-      begin
-        if FillObjects and (sqlite3_column_count(vm) > 1) then
-          FillStringsAndObjects
-        else
-          FillStrings;
-      end;
-    end;
-    sqlite3_finalize(vm);
+    if ExecTo(ASQL, aCons) then
+      Result := aCons.Res
+    else
+      Result := '';
   finally
-    UnLock;
+    aCons.Free;
   end;
+end;
+
+function TExtSqlite3Dataset.ExecToValue(const ASQL : String;
+  aValues : PSqliteVariantArray) : Boolean;
+var aCons : TSqliteConsumeVarHolder;
+begin
+  aCons := TSqliteConsumeVarHolder.Create(nil, aValues);
+  try
+    Result := ExecTo(ASQL, aCons);
+  finally
+    aCons.Free;
+  end;
+end;
+
+function TExtSqlite3Dataset.ExecToValue(const ASQL : String; aValues : Pointer;
+  aSize : PtrInt) : Boolean;
+var aCons : TSqliteConsumePtrHolder;
+begin
+  aCons := TSqliteConsumePtrHolder.Create(nil, aValues, aSize);
+  try
+    Result := ExecTo(ASQL, aCons);
+  finally
+    aCons.Free;
+  end;
+end;
+
+function TExtSqlite3Dataset.ExecToValue(const ASQL : String; var aValues
+  ) : Boolean;
+begin
+  Result := ExecToValue(ASQL, @aValues, SizeOf(aValues));
 end;
 
 procedure TExtSqlite3Dataset.Open(aMode : TExtSqlite3OpenMode);
@@ -1873,6 +1821,43 @@ begin
     FOnPrepared(aRequest, aResult);
 end;
 
+function TExtSqlite3Dataset.ExecTo(const ASQL : String;
+  aCons : TSqliteConsumeHolder) : Boolean;
+var c : integer;
+    vm : psqlite3_stmt;
+begin
+  Lock;
+  try
+    if FSqliteHandle = nil then
+      GetSqliteHandle;
+    FReturnCode := sqlite3_prepare_v2(FSqliteHandle,PAnsiChar(ASQL),-1,@vm, nil);
+    DoRequestPrepared(ASQL, FReturnCode);
+    if FReturnCode <> SQLITE_OK then
+      DatabaseError(ReturnString, Self);
+    FReturnCode := sqlite3_step(vm);
+    if (FReturnCode = SQLITE_ROW) or
+       (FReturnCode = SQLITE_DONE) then
+    begin
+      if Assigned(aCons) and
+         (FReturnCode = SQLITE_ROW) then
+      begin
+        aCons.vm := vm;
+        c := sqlite3_column_count(vm);
+        if c > 0 then
+        begin
+          aCons.Consume(c);
+          Result := true;
+        end else
+          Result := false;
+      end else Result := true;
+    end else
+      Result := false;
+    sqlite3_finalize(vm);
+  finally
+    UnLock;
+  end;
+end;
+
 function TExtSqlite3Dataset.GetRecord(Buffer: TRecordBuffer; GetMode: TGetMode; DoCheck: Boolean): TGetResult;
 begin
   if FOpenMode = eomNormal then
@@ -1939,7 +1924,7 @@ function TExtSqlite3Dataset.ReturnString: String;
 begin
   Lock;
   try
-    Result := SqliteCode2Str(FReturnCode) + ' - ' + sqlite3_errmsg(FSqliteHandle);
+    Result := sqluCode2Str(FReturnCode) + ' - ' + sqlite3_errmsg(FSqliteHandle);
   finally
     UnLock;
   end;
@@ -2033,7 +2018,7 @@ end;
 
 procedure TSqlite3Function.SetResult(const res: Cardinal);
 begin
-  sqlite3_result_int(FContext, Integer(res))
+  sqlite3_result_int(FContext, res);
 end;
 
 procedure TSqlite3Function.SetResult(const res: QWord);

@@ -8,9 +8,6 @@ unit OGLB64Utils;
 
 interface
 
-uses
-  Classes, SysUtils;
-
 function EncodeIntToB64(value : Cardinal; Digits : integer) : RawByteString;
 function EncodeInt64ToB64(value : QWORD; Digits : integer) : String;
 function DecodeB64ToByte(const C : AnsiChar) : Byte; inline;
