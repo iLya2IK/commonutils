@@ -245,6 +245,7 @@ type
     function IndexOf(const Obj : T) : Integer;
     function Remove(const obj: T) : integer; virtual;
     procedure Delete(Ind : integer); virtual;
+    procedure DeleteFreeAssigned(Ind : integer); virtual;
     procedure Clear; virtual;
     procedure Extract(Ind : integer); virtual;
     procedure Pack; virtual;
@@ -302,6 +303,8 @@ type
     procedure Push_front(const O : TObject); virtual;
     function Pop : TIteratorObject;
     function PopValue : T;
+    function LastValue : T;
+    function FirstValue : T;
     function InsertBefore(loc: TIteratorObject; o: TObject): TIteratorObject; virtual;
     function InsertAfter(loc: TIteratorObject; o: TObject): TIteratorObject; virtual;
     procedure Erase(const loc : TIteratorObject);
@@ -771,6 +774,16 @@ begin
   end;
 end;
 
+procedure TThreadSafeFastBaseCollection.DeleteFreeAssigned(Ind : integer);
+begin
+  Lock;
+  try
+    FCollection.DeleteFreeAssigned(Ind);
+  finally
+    UnLock;
+  end;
+end;
+
 procedure TThreadSafeFastBaseCollection.Clear;
 begin
   Lock;
@@ -998,6 +1011,26 @@ begin
   Lock;
   try
     Result := T(FSeq.PopValue);
+  finally
+    UnLock;
+  end;
+end;
+
+function TThreadSafeFastBaseSeq.LastValue : T;
+begin
+  Lock;
+  try
+    Result := T(FSeq.LastValue);
+  finally
+    UnLock;
+  end;
+end;
+
+function TThreadSafeFastBaseSeq.FirstValue : T;
+begin
+  Lock;
+  try
+    Result := T(FSeq.FirstValue);
   finally
     UnLock;
   end;

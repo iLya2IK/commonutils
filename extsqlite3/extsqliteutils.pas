@@ -19,6 +19,8 @@ interface
 
 uses
   Classes, SysUtils,
+  ECommonObjs,
+  AvgLvlTree,
   {$IFDEF LOAD_DYNAMICALLY}
   SQLite3Dyn,
   DynLibs,
@@ -35,11 +37,45 @@ type
                        dbckForeignKey,
                        dbckGenerated);
 
+  TSqliteValueKind = (dbvkExpression,
+                      dbvkDefaultValue,
+                      dbvkCollationName,
+                      dbvkIndexedColumns,
+                      dbvkColumns,
+                      dbvkTable);
+
+  TSqliteTableOption = (toCheckExists, toIsTemp, toWORowID);
+
   TSqliteDataTypeAffinity = (dtaUnknown, dtaInteger, dtaText,
                              dtaBlob, dtaReal, dtaNumeric);
 
-  function sqluConstraintKindToStr(aKind : TSqliteConstrKind) : String;
+  TSqliteKwFormatOption = (skfoOriginal, skfoUpperCase, skfoLowerCase, skfoFromCapit);
 
+  { TSqliteMemoryDB }
+
+  TSqliteMemoryDB = class(TThreadSafeObject)
+  private
+    FDB : psqlite3;
+    FLastError : TThreadUtf8String;
+    function GetLastError : String;
+    procedure SetLastError(AValue : String);
+  public
+    constructor Create;
+    function Initialize(const aName : String) : Integer;
+    destructor destroy; override;
+    property LastError : String read GetLastError write SetLastError;
+    property Handle : psqlite3 read FDB;
+  end;
+
+
+  function sqluConstraintKindToStr(aKind : TSqliteConstrKind) : String;
+  function sqluTableOptionKindToStr(aKind : TSqliteTableOption) : String;
+
+  function sqluCheckExpr(const aExpr : String; aDB : TSqliteMemoryDB = nil) : Integer;
+  function sqluCheckExpr(const aExpr : String; aDB : psqlite3) : Integer; overload;
+  function sqluCheckExprIsReadOnly(const aExpr : String; aDB : psqlite3) : Boolean;
+  function sqluGetCheckExprLastError : String;
+  function sqluGetLastError(aSqliteHandle : psqlite3; err : Integer) : String;
   function sqluCode2Str(Code: Integer): String;
   function sqluAvaibleDataTypesPartsCount() : Integer;
   function sqluAvaibleDataTypesPart(Pos : Cardinal) : String;
@@ -56,79 +92,112 @@ type
   {$IFDEF S}function{$ELSE}var{$ENDIF} sqlite3_stricmp{$IFDEF D}: function{$ENDIF}(expr1, expr2:pansichar):cint;cdecl;{$IFDEF S}external Sqlite3Lib;{$ENDIF}
   {$IFDEF S}function{$ELSE}var{$ENDIF} sqlite3_strnicmp{$IFDEF D}: function{$ENDIF}(expr1, expr2:pansichar;l:cint):cint;cdecl;{$IFDEF S}external Sqlite3Lib;{$ENDIF}
 
+  {$IFDEF S}function{$ELSE}var{$ENDIF} sqlite3_stmt_readonly{$IFDEF D}: function{$ENDIF}(pStmt : psqlite3_stmt): cint;cdecl;{$IFDEF S}external Sqlite3Lib;{$ENDIF}
+
   {$IFDEF LOAD_DYNAMICALLY}
   procedure InitializeSqlite3ExtFuncs;
   {$ENDIF}
   function sqluGetKeyWordCount : Integer;
   function sqluGetKeyWordName(N : Integer) : String;
   function sqluGetIndexedKeyWordCount() : Integer;
-  function sqluGetIndexedKeyWord(Index : Cardinal) : String;
+  function sqluGetIndexedKeyWordInd(const KW : String) : Integer;
+  function sqluGetIndexedKeyWord(Index : Cardinal;
+                                   aOption : TSqliteKwFormatOption =
+                                                        skfoUpperCase) : String;
+  function sqluGetIndexedKeyWords(const Indexes : Array of Cardinal;
+                                   aOption : TSqliteKwFormatOption =
+                                                        skfoUpperCase) : String;
   function sqluCheckKeyWord(const KW : String) : Integer;
+  function sqluFormatKeyWord(const KW : String;
+                              aOption : TSqliteKwFormatOption =
+                                                        skfoUpperCase) : String;
+  function sqluDeterminateFormat(const aToken : String) : TSqliteKwFormatOption;
+  function sqluGetKeyWordsList() : String;
+  function sqluGetFunctionsList() : String;
+  function sqluGetDataTypesList() : String;
+
   function sqluQuotedId(const S : String) : String;
+  function sqluUnquotedId(const S : String) : String;
   function sqluQuotedStr(const S : String) : String;
   function sqluCheckIsNeedQuoted(const Id : String) : Boolean;
+  function sqluQuotedIdIfNeeded(const S : String) : String;
+  function sqluUnquotedIdIfNeeded(const S : String) : String;
   function sqluCompareNames(const S1, S2 : String) : Boolean;
 
+  //memory db functions
+  function sqluNewMemoryDB(const aName : String) : psqlite3;
+  function sqluExecuteInMemory(mem : psqlite3; const aExpr : String) : Cardinal;
+  procedure sqluDeleteMemoryDB(mem : psqlite3);
 
 const
-  kwCREATE = 0;
-  kwTEMP = 1;
-  kwTEMPORARY = 2;
-  kwTABLE = 3;
-  kwIF = 4;
-  kwNOT = 5;
-  kwEXISTS = 6;
-  kwAS = 7;
-  kwWITHOUT = 8;
-  kwROWID = 9;
-  kwCONSTRAINT = 10;
-  kwPRIMARY = 11;
-  kwUNIQUE = 12;
-  kwCHECK = 13;
-  kwDEFAULT = 14;
-  kwCOLLATE = 15;
-  kwREFERENCES = 16;
-  kwGENERATED = 17;
-  kwKEY = 18;
-  kwNULL = 19;
-  kwON = 20;
-  kwTRUE = 21;
-  kwFALSE = 22;
-  kwCURRENT_TIME = 23;
-  kwCURRENT_DATE = 24;
-  kwCURRENT_TIMESTAMP = 25;
-  kwALWAYS = 26;
-  kwASC = 27;
-  kwDESC = 28;
-  kwCONFLICT = 29;
-  kwSTORED = 30;
-  kwVIRTUAL = 31;
-  kwAUTOINCREMENT = 32;
-  kwROLLBACK = 33;
-  kwABORT = 34;
-  kwFAIL = 35;
-  kwIGNORE = 36;
-  kwREPLACE = 37;
-  kwMATCH = 38;
-  kwDEFERRABLE = 39;
-  kwDELETE = 40;
-  kwUPDATE = 41;
-  kwINITIALLY = 42;
-  kwSET = 43;
-  kwCASCADE = 44;
-  kwRESTRICT = 45;
-  kwDEFERRED = 46;
-  kwIMMEDIATE = 47;
-  kwACTION = 48;
-  kwNO = 49;
-  kwFOREIGN = 50;
+  kwCREATE : Word = 0;
+  kwTEMP   : Word = 1;
+  kwTEMPORARY: Word = 2;
+  kwTABLE: Word = 3;
+  kwIF: Word = 4;
+  kwNOT: Word = 5;
+  kwEXISTS: Word = 6;
+  kwAS: Word = 7;
+  kwWITHOUT: Word = 8;
+  kwROWID: Word = 9;
+  kwCONSTRAINT: Word = 10;
+  kwPRIMARY: Word = 11;
+  kwUNIQUE: Word = 12;
+  kwCHECK: Word = 13;
+  kwDEFAULT: Word = 14;
+  kwCOLLATE: Word = 15;
+  kwREFERENCES: Word = 16;
+  kwGENERATED: Word = 17;
+  kwKEY: Word = 18;
+  kwNULL: Word = 19;
+  kwON: Word = 20;
+  kwTRUE: Word = 21;
+  kwFALSE: Word = 22;
+  kwCURRENT_TIME: Word = 23;
+  kwCURRENT_DATE: Word = 24;
+  kwCURRENT_TIMESTAMP: Word = 25;
+  kwALWAYS: Word = 26;
+  kwASC: Word = 27;
+  kwDESC: Word = 28;
+  kwCONFLICT: Word = 29;
+  kwSTORED: Word = 30;
+  kwVIRTUAL: Word = 31;
+  kwAUTOINCREMENT: Word = 32;
+  kwROLLBACK: Word = 33;
+  kwABORT: Word = 34;
+  kwFAIL: Word = 35;
+  kwIGNORE: Word = 36;
+  kwREPLACE: Word = 37;
+  kwMATCH: Word = 38;
+  kwDEFERRABLE: Word = 39;
+  kwDELETE: Word = 40;
+  kwUPDATE: Word = 41;
+  kwINITIALLY: Word = 42;
+  kwSET: Word = 43;
+  kwCASCADE: Word = 44;
+  kwRESTRICT: Word = 45;
+  kwDEFERRED: Word = 46;
+  kwIMMEDIATE: Word = 47;
+  kwACTION: Word = 48;
+  kwNO: Word = 49;
+  kwFOREIGN: Word = 50;
+  kwBEGIN: Word = 51;
+  kwTRANSACTION: Word = 52;
+  kwEXCLUSIVE: Word = 53;
+  kwCOMMIT: Word = 54;
+  kwEND: Word = 55;
+  kwSAVEPOINT: Word = 56;
+  kwRELEASE: Word = 57;
+  kwTO: Word = 58;
 
 implementation
 
 uses LazUTF8;
 
+const cMaxIndexedKeyWords = 58;
+
 const
-  sqliteAvaibleKeyWords : Array [0..50] of string =
+  sqliteAvaibleKeyWords : Array [0..cMaxIndexedKeyWords] of string =
     ('CREATE', 'TEMP', 'TEMPORARY', 'TABLE', 'IF', 'NOT',
      'EXISTS', 'AS', 'WITHOUT', 'ROWID', 'CONSTRAINT',
      'PRIMARY', 'UNIQUE', 'CHECK', 'DEFAULT', 'COLLATE',
@@ -139,12 +208,13 @@ const
      'ROLLBACK', 'ABORT', 'FAIL', 'IGNORE', 'REPLACE',
      'MATCH', 'DEFERRABLE', 'DELETE', 'UPDATE', 'INITIALLY',
      'SET', 'CASCADE', 'RESTRICT', 'DEFERRED', 'IMMEDIATE',
-     'ACTION', 'NO', 'FOREIGN');
+     'ACTION', 'NO', 'FOREIGN', 'BEGIN', 'TRANSACTION',
+     'EXCLUSIVE', 'COMMIT', 'END', 'SAVEPOINT', 'RELEASE', 'TO');
 
 const
   sqliteAffinity : Array [TSqliteDataTypeAffinity] of string= (
    'UNKNOWN',
-   'INT',
+   'INTEGER',
    'TEXT',
    'BLOB',
    'REAL',
@@ -153,8 +223,8 @@ const
 
 const
   sqliteAvaibleDataTypeParts : Array [0..28] of string =
-    ('INT',              //0
-     'INTEGER',          //1
+    ('INTEGER',          //0
+     'INT',              //1
      'TINYINT',          //2
      'SMALLINT',         //3
      'MEDIUMINT',        //4
@@ -193,9 +263,95 @@ const DBConstrToStr : Array [TSqliteConstrKind] of String = (
                    'ForeignKey',
                    'Generated');
 
+var vSqliteCheckerDB : TSqliteMemoryDB = nil;
+    vIndexedStrs     : TStringToPointerTree;
+
+procedure DestroyExprChecker();
+begin
+  if Assigned(vSqliteCheckerDB) then
+    vSqliteCheckerDB.Free;
+end;
+
 function sqluConstraintKindToStr(aKind : TSqliteConstrKind) : String;
 begin
   Result := DBConstrToStr[aKind];
+end;
+
+function sqluTableOptionKindToStr(aKind : TSqliteTableOption) : String;
+begin
+  case aKind of
+    toCheckExists : Result := sqluGetIndexedKeyWords([kwIF, kwNOT, kwEXISTS]);
+    toWORowID : Result := sqluGetIndexedKeyWords([kwWITHOUT, kwROWID]);
+    toIsTemp : Result := sqluGetIndexedKeyWord(kwTEMP);
+  else
+    Result := '';
+  end;
+end;
+
+function sqluCheckExpr(const aExpr : String; aDB : TSqliteMemoryDB = nil) : Integer;
+begin
+  if not Assigned(aDB) then
+  begin
+    if not Assigned(vSqliteCheckerDB) then
+    begin
+      vSqliteCheckerDB := TSqliteMemoryDB.Create;
+      vSqliteCheckerDB.Initialize('checker');
+    end;
+    aDB := vSqliteCheckerDB;
+  end;
+
+  aDb.Lock;
+  try
+    if Assigned(aDb.Handle) then
+    begin
+      Result := sqluCheckExpr(aExpr, aDB.Handle);
+      if Result <> SQLITE_OK then
+      begin
+        aDb.LastError := sqluCode2Str(Result) + ' - ' +
+                                       sqlite3_errmsg(aDB.Handle);
+      end else aDb.LastError := '';
+    end else Result := SQLITE_MISUSE;
+  finally
+    aDb.UnLock;
+  end;
+end;
+
+function sqluCheckExpr(const aExpr : String; aDB : psqlite3) : Integer;
+var vm : psqlite3_stmt;
+begin
+  if Assigned(aDb) then
+  begin
+    Result := sqlite3_prepare_v2(aDb, PAnsiChar(aExpr), -1, @vm, nil);
+    sqlite3_finalize(vm);
+  end;
+end;
+
+function sqluCheckExprIsReadOnly(const aExpr: String; aDB: psqlite3): Boolean;
+var vm : psqlite3_stmt;
+    er : Integer;
+begin
+  if Assigned(aDb) then
+  begin
+    er := sqlite3_prepare_v2(aDb, PAnsiChar(aExpr), -1, @vm, nil);
+    if er = SQLITE_OK then
+      Result := sqlite3_stmt_readonly(vm) <> 0 else
+      Result := false;
+    sqlite3_finalize(vm);
+  end;
+end;
+
+function sqluGetCheckExprLastError : String;
+begin
+  if Assigned(vSqliteCheckerDB) then
+    Result := vSqliteCheckerDB.LastError else
+    Result := '';
+end;
+
+function sqluGetLastError(aSqliteHandle : psqlite3; err : Integer) : String;
+begin
+  Result := sqluCode2Str(err);
+  if err <> SQLITE_OK then
+    Result := Result + ' - ' + sqlite3_errmsg(aSqliteHandle);
 end;
 
 function sqluCode2Str(Code: Integer): String;
@@ -247,6 +403,7 @@ begin
   pointer(sqlite3_keyword_check) := GetProcedureAddress(LibHandle,'sqlite3_keyword_check');
   pointer(sqlite3_strnicmp) := GetProcedureAddress(LibHandle,'sqlite3_strnicmp');
   pointer(sqlite3_stricmp) := GetProcedureAddress(LibHandle,'sqlite3_stricmp');
+  pointer(sqlite3_stmt_readonly) := GetProcedureAddress(LibHandle,'sqlite3_stmt_readonly');
 end;
 {$ENDIF}
 
@@ -269,14 +426,114 @@ begin
     Result := '';
 end;
 
+function sqluGetIndexedKeyWords(const Indexes : array of Cardinal;
+  aOption : TSqliteKwFormatOption) : String;
+var i : integer;
+begin
+  Result := '';
+  for i := 0 to high(Indexes) do
+  begin
+    if i > 0 then Result := Result + ' ';
+    Result := Result + sqluGetIndexedKeyWord(Indexes[i], aOption);
+  end;
+end;
+
 function sqluCheckKeyWord(const KW: String): Integer;
 begin
   Result := sqlite3_keyword_check(@(KW[1]), Length(KW));
+  if Result = 0 then begin
+    if SameStr(UpperCase(KW), sqliteAvaibleKeyWords[kwROWID]) then
+      Result := $0f01;
+  end;
+end;
+
+function sqluFormatKeyWord(const KW : String; aOption : TSqliteKwFormatOption
+  ) : String;
+begin
+  case aOption of
+    skfoOriginal  : Result := KW;
+    skfoLowerCase : Result := LowerCase(KW);
+    skfoUpperCase : Result := UpperCase(KW);
+    skfoFromCapit : Result := UpperCase(Copy(KW, 1, 1)) +
+                              LowerCase(Copy(KW, 2, Length(KW)-1));
+  end;
+end;
+
+function sqluDeterminateFormat(const aToken : String) : TSqliteKwFormatOption;
+begin
+  if SameStr(LowerCase(aToken), aToken) then
+  begin
+    Result := skfoLowerCase;
+  end else
+  if SameStr(UpperCase(aToken), aToken) then
+  begin
+    Result := skfoUpperCase;
+  end else
+    Result := skfoFromCapit;
+end;
+
+function sqluGetKeyWordsList() : String;
+var i : integer;
+    SL : TStringList;
+begin
+  SL := TStringList.Create;
+  try
+    SL.Sorted := true;
+    SL.Duplicates := dupIgnore;
+    for i := 1 to sqluGetKeyWordCount do
+      SL.Add(sqluGetKeyWordName(i));
+    SL.Add(sqliteAvaibleKeyWords[kwROWID]);
+    SL.Delimiter := ',';
+    Result := LowerCase(SL.DelimitedText);
+  finally
+    SL.Free;
+  end;
+end;
+
+function sqluGetFunctionsList() : String;
+begin
+  Result := 'abs,avg,changes,coalesce,count,group_concat,hex,iif,ifnull,' +
+    'julianday,last_insert_rowid,length,load_extension,lower,ltrim,max,min,' +
+    'nullif,quote,random,randomblob,round,rtrim,soundex,sqlite_compileoption_get,' +
+    'sqlite_compileoption_used,sqlite_source_id,sqlite_version,strftim,substr,sum,time,' +
+    'total,total_changes,trim,typeof,upper,zeroblob';
+end;
+
+function sqluGetDataTypesList() : String;
+var i : integer;
+    SL : TStringList;
+begin
+  SL := TStringList.Create;
+  try
+    SL.Sorted := true;
+    SL.Duplicates := dupIgnore;
+    for i := Low(sqliteAvaibleDataTypeParts) to
+             High(sqliteAvaibleDataTypeParts) do
+    if not (i in [6, 7, 12, 13, 15, 22]) then
+      SL.Add(sqliteAvaibleDataTypeParts[i]);
+    SL.Delimiter := ',';
+    Result := LowerCase(SL.DelimitedText);
+  finally
+    SL.Free;
+  end;
 end;
 
 function sqluQuotedId(const S : String) : String;
 begin
   Result := '"' + UTF8StringReplace(S, '"', '""', [rfReplaceAll]) + '"';
+end;
+
+function sqluQuotedIdIfNeeded(const S : String) : String;
+begin
+  if sqluCheckIsNeedQuoted(s) then
+    Result := '"' + UTF8StringReplace(S, '"', '""', [rfReplaceAll]) + '"' else
+    Result := S;
+end;
+
+function sqluUnquotedId(const S : String) : String;
+begin
+  Result := UTF8Copy(S, 2, UTF8Length(S) - 2);
+  Result := UTF8StringReplace(Result, '""', '"', [rfReplaceAll]);
 end;
 
 function sqluQuotedStr(const S : String) : String;
@@ -340,6 +597,18 @@ begin
 end;
 {.$endif}
 
+function sqluUnquotedIdIfNeeded(const S : String) : String;
+begin
+  if Length(S) > 2 then
+  begin
+    if S[1] = '"' then begin
+      Result := sqluUnquotedId(S);
+    end else
+      Result := S;
+  end else
+    Result := S;
+end;
+
 function sqluCompareNames(const S1, S2 : String) : Boolean;
 var len : integer;
 begin
@@ -356,14 +625,50 @@ begin
   {$endif}
 end;
 
+function sqluNewMemoryDB(const aName : String) : psqlite3;
+var code : Cardinal;
+begin
+  code := sqlite3_open_v2(PAnsiChar(aName), @Result,
+                                             SQLITE_OPEN_CREATE or
+                                             SQLITE_OPEN_READWRITE or
+                                             SQLITE_OPEN_MEMORY, nil);
+  if code <> SQLITE_OK then Result := nil;
+end;
+
+function sqluExecuteInMemory(mem : psqlite3; const aExpr : String) : Cardinal;
+begin
+  Result := sqlite3_exec(mem, PAnsiChar(aExpr), nil, nil, nil);
+end;
+
+procedure sqluDeleteMemoryDB(mem : psqlite3);
+begin
+  sqlite3_close_v2(mem);
+end;
+
 function sqluGetIndexedKeyWordCount() : Integer;
 begin
   Result := Length(sqliteAvaibleKeyWords);
 end;
 
-function sqluGetIndexedKeyWord(Index : Cardinal) : String;
+function sqluGetIndexedKeyWordInd(const KW : String) : Integer;
+var
+  i : PWord;
 begin
-  Result := sqliteAvaibleKeyWords[Index];
+  i := PWord(vIndexedStrs.Values[UpperCase(KW)]);
+  if assigned(i) then
+    Result := i^
+  else
+    Result := -1;
+end;
+
+function sqluGetIndexedKeyWord(Index : Cardinal; aOption : TSqliteKwFormatOption
+  ) : String;
+begin
+  case aOption of
+    skfoUpperCase : Result := sqliteAvaibleKeyWords[Index];
+  else
+    Result := sqluFormatKeyWord(sqliteAvaibleKeyWords[Index], aOption);
+  end;
 end;
 
 function sqluAvaibleDataTypesPartsCount() : Integer;
@@ -398,6 +703,61 @@ function sqluAffinityToStr(aff : TSqliteDataTypeAffinity) : String;
 begin
   Result := sqliteAffinity[aff];
 end;
+
+{ TSqliteMemoryDB }
+
+function TSqliteMemoryDB.GetLastError : String;
+begin
+  Result := FLastError.Value;
+end;
+
+procedure TSqliteMemoryDB.SetLastError(AValue : String);
+begin
+  FLastError.Value := AValue;
+end;
+
+constructor TSqliteMemoryDB.Create;
+begin
+  inherited Create;
+  FLastError := TThreadUtf8String.Create('');
+  FDB := nil;
+end;
+
+function TSqliteMemoryDB.Initialize(const aName : String) : Integer;
+begin
+  Result := sqlite3_open_v2(PAnsiChar(aName), @FDB,
+                                             SQLITE_OPEN_CREATE or
+                                                SQLITE_OPEN_READWRITE or
+                                                SQLITE_OPEN_MEMORY,
+                                             nil);
+  if Result <> SQLITE_OK then FDB := nil;
+end;
+
+destructor TSqliteMemoryDB.destroy;
+begin
+  if Assigned(FDB) then
+    sqlite3_close_v2(FDB);
+  FDB := nil;
+  FLastError.Free;
+  inherited destroy;
+end;
+
+var i : Word;
+    gArray : Array [0..cMaxIndexedKeyWords] of Word;
+
+initialization
+  vIndexedStrs := TStringToPointerTree.Create(true);
+  vIndexedStrs.FreeValues := false;
+  for i := 0 to cMaxIndexedKeyWords do
+  begin
+    gArray[i] := i;
+    vIndexedStrs.Values[sqliteAvaibleKeyWords[i]] := @(gArray[i]);
+  end;
+
+
+finalization
+  DestroyExprChecker;
+  vIndexedStrs.Free;
 
 end.
 

@@ -94,6 +94,9 @@ type
     function InsertAfter(loc: TIteratorObject; o: TObject): TIteratorObject;
     function Pop : TIteratorObject;
     function PopValue : TObject;
+    function LastValue : TObject;
+    function FirstValue : TObject;
+
     procedure IteratorErase(const loc : PIterator);
     procedure Erase(const loc : TIteratorObject);
     procedure EraseObject(const obj : TObject);
@@ -164,6 +167,7 @@ type
   public
     procedure Extract(Ind : integer); override;
     procedure Delete(Ind : integer); override;
+    procedure DeleteFreeAssigned(Ind : integer); virtual;
     procedure Clear; override;
     destructor Destroy; override;
   end;
@@ -810,6 +814,13 @@ begin
   inherited Delete(ind);
 end;
 
+procedure TFastCollection.DeleteFreeAssigned(Ind: integer);
+begin
+  if Assigned(FList^[ind]) then
+    FList^[Ind].Free;
+  inherited Delete(Ind);
+end;
+
 destructor TFastCollection.Destroy;
 begin
   Clear;
@@ -1187,6 +1198,18 @@ begin
     IOb.Value := nil;
     IOb.Free;
   end else Result := nil;
+end;
+
+function TFastSeq.LastValue : TObject;
+begin
+  if not assigned(FLast) then exit(nil);
+  Result := FLast.Value;
+end;
+
+function TFastSeq.FirstValue : TObject;
+begin
+  if not assigned(FFirst) then exit(nil);
+  Result := FFirst.Value;
 end;
 
 procedure TFastSeq.Push_iterator_obj(const aIO: TIteratorObject);

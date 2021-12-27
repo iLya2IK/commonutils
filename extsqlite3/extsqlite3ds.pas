@@ -356,6 +356,7 @@ type
     function AddNewPrep(const aSQL: String{$ifdef prepared_multi_holders};
       ThreadCnt : SmallInt = -1 {$endif}): TSqlite3Prepared;
     procedure ClearPrepared;
+    procedure ClearFunctions;
 
     function FindFunction(aFuncClass : TSqlite3FunctionClass;
                                      const aParams : Array of const) : TSqlite3Function;
@@ -369,6 +370,9 @@ type
     procedure Open(aMode : TExtSqlite3OpenMode); overload;
     function  GetFieldData(Field: TField; Buffer: Pointer; NativeFormat: Boolean): Boolean; override;
     function  CreateBlobStream(Field: TField; Mode: TBlobStreamMode): TStream; override;
+    function  CheckExpression(const aExpr : String) : Integer;
+    function  FormatLastError(err : Cardinal) : String;
+    function  CheckExprIsReadOnly(const aExpr : String) : Boolean;
 
     function ReturnString: String; override;
     procedure Lock; inline;
@@ -974,6 +978,8 @@ procedure TSqlite3PreparedHolder.Disconnect;
 begin
   if not ready then exit;
   sqlite3_finalize(vm);
+  ready := false;
+  vm := nil;
 end;
 
 {$ifdef extra_prepared_thread_safe}
@@ -1339,6 +1345,7 @@ begin
   end;
 
   sqlite3_close(FSqliteHandle);
+
   FSqliteHandle := nil;
 end;
 
@@ -1411,6 +1418,14 @@ begin
   for i := 0 to FPrepared.Count-1 do
      FPrepared[i].Disconnect;
   FPrepared.Clear;
+end;
+
+procedure TExtSqlite3Dataset.ClearFunctions;
+var i : integer;
+begin
+  for i := 0 to FFunctions.Count-1 do
+     FFunctions[i].Disconnect;
+  FFunctions.Clear;
 end;
 
 function TExtSqlite3Dataset.FindFunction(aFuncClass : TSqlite3FunctionClass;
@@ -1718,7 +1733,8 @@ end;
 begin
   //Get AutoInc Field initial value
   if FAutoIncFieldNo <> -1 then
-    sqlite3_exec(FSqliteHandle, PAnsiChar('Select Max(' + FieldDefs[FAutoIncFieldNo].Name +
+    sqlite3_exec(FSqliteHandle, PAnsiChar('Select Max(' +
+      sqluQuotedIdIfNeeded(FieldDefs[FAutoIncFieldNo].Name) +
       ') from ' + FTableName), @GetAutoIncValue, @FNextAutoInc, nil);
 
   if FOpenMode = eomNormal then
@@ -1897,6 +1913,21 @@ begin
     TBufferedStream(Result).SetPtr(sqlite3_column_text(FUniDirPrepared,  Field.FieldNo-1),
                                    sqlite3_column_bytes(FUniDirPrepared, Field.FieldNo-1));
   end;
+end;
+
+function TExtSqlite3Dataset.CheckExpression(const aExpr : String) : Integer;
+begin
+  Result := sqluCheckExpr(aExpr, FSqliteHandle);
+end;
+
+function TExtSqlite3Dataset.FormatLastError(err : Cardinal) : String;
+begin
+  Result := sqluGetLastError(FSqliteHandle, err);
+end;
+
+function TExtSqlite3Dataset.CheckExprIsReadOnly(const aExpr: String): Boolean;
+begin
+  Result := sqluCheckExprIsReadOnly(aExpr, FSqliteHandle);
 end;
 
 function TExtSqlite3Dataset.GetNextRecords : Longint;

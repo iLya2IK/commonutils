@@ -13,25 +13,13 @@ unit ExprComparator;
 
 {$mode objfpc}{$H+}
 {$modeswitch advancedrecords}
-{.$define regexpr_new}
-{$define regexpr_t}
-{$ifdef regexpr_new}{$define regexpr_nt}{$endif}
-{$ifdef regexpr_t}{$define regexpr_nt}{$endif}
 
 interface
 
 uses
   Classes, SysUtils, OGLFastList,
   BufferedStream, OGLB64Utils,
-  {$ifdef regexpr_new}
-  RegExpr
-  {$else}
-  {$ifdef regexpr_t}
-  regexpr_t
-  {$else}
-  uregexpr
-  {$endif}
-  {$endif};
+  OGLRegExprWrapper;
 
 type
 
@@ -122,9 +110,6 @@ public
   property ConcatExpr[index : integer] : TSinExpr read GetConcatExpr;
 end;
 
-function SinRegExpr(const aInp, aExpr : String) : Boolean;
-function SinRegExprVersionMajor : Integer;
-function SinRegExprVersionMinor : Integer;
 function DLdist(afirst, asecond : PChar; lFirst,
   lSecond : Integer; U8lFirst, U8lSecond : Integer) : Single; overload;
 function DLdist(const afirst, asecond: RawByteString;
@@ -141,29 +126,6 @@ const
 implementation
 
 uses Math, LazUTf8;
-
-
-function SinRegExpr(const aInp, aExpr : String) : Boolean;
-var re : TRegExpr;
-begin
-  re := TRegExpr.Create(UnicodeString(aExpr));
-  re.ModifierR := true;
-  try
-    Result := re.Exec(UnicodeString(aInp));
-  finally
-    re.Free;
-  end;
-end;
-
-function SinRegExprVersionMajor : Integer;
-begin
-  Result := TRegExpr.VersionMajor;
-end;
-
-function SinRegExprVersionMinor : Integer;
-begin
-  Result := TRegExpr.VersionMinor;
-end;
 
 function LatToCyr(const S: RawByteString; U8len : integer): RawByteString;
 var i : Integer;
@@ -702,7 +664,7 @@ end;
 procedure TSinExpr.ConsumeExpr(const aExpr : String;
   AllowedSeparators : TSinExprSeps);
 var
-    re : TRegExpr;
+    re : TRegExprWrapper;
     MExpr, CRegExpr : String;
 begin
   FOrigExpr:=aExpr;
@@ -710,7 +672,7 @@ begin
   AllocData(256);
   WriteToData('00');
   MExpr := UTF8LowerCase(Utf8Trim(FOrigExpr));
-  CRegExpr := {$ifdef regexpr_nt}'(([а-я]+)'{$else}'(([а-пр-я]+)'{$endif}+
+  CRegExpr := '((' + TRegExprWrapper.GetRusSmallLettersRange + '+)'+
               '|([a-z]+)|(\d+)';
   if AllowedSeparators <> [] then
   begin
@@ -722,13 +684,13 @@ begin
       CRegExpr:= CRegExpr + '|(\.)';
   end;
   CRegExpr := CRegExpr + ')';
-  re := TRegExpr.Create(UnicodeString(CRegExpr));
-  re.ModifierR := true;
+  re := TRegExprWrapper.Create(CRegExpr);
+  re.SetModifierR;
   try
-    if re.Exec(UnicodeString(MExpr)) then
+    if re.Exec(MExpr) then
     begin
       repeat
-        AddTokenStr(UTF8Encode(re.Match[0]));
+        AddTokenStr(re.Match[0]);
       until not re.ExecNext;
     end;
   finally

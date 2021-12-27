@@ -20,7 +20,7 @@ interface
 uses
   Classes, SysUtils,
   OGLFastNumList, ECommonObjs,
-  ExprComparator, ExtSqlite3DS;
+  ExprComparator, OGLRegExprWrapper, ExtSqlite3DS;
 
 type
   { TExprCompareFunction }
@@ -259,6 +259,15 @@ type
   { TExprCrossHitContIdxFunction }
 
   TExprCrossHitContIdxFunction = class(TExprIdxFunction)
+  private
+    procedure DoScalarFunc(argc : integer; E1, E2 : TSinExpr); override;
+  public
+    constructor Create(aIndexedExprs: TBaseSinIndexedExprs; aOwnIndexes: Boolean = false);
+  end;
+
+  { TExprContIdxFunction }
+
+  TExprContIdxFunction = class(TExprIdxFunction)
   private
     procedure DoScalarFunc(argc : integer; E1, E2 : TSinExpr); override;
   public
@@ -693,6 +702,21 @@ begin
   inherited Create('dlcrsconti', -1, aIndexedExprs, aOwnIndexes);
 end;
 
+{ TExprContIdxFunction }
+
+procedure TExprContIdxFunction.DoScalarFunc(argc: integer; E1, E2: TSinExpr);
+begin
+  if argc = 2 then
+    SetResult( E1.Contain(E2) ) else
+    SetResultNil;
+end;
+
+constructor TExprContIdxFunction.Create(aIndexedExprs: TBaseSinIndexedExprs;
+  aOwnIndexes: Boolean);
+begin
+  inherited Create('dlconti', -1, aIndexedExprs, aOwnIndexes);
+end;
+
 { TSinIndexedExprs }
 
 function TSinIndexedExprs.GetValueSafe(aKey: TKey): TSinExpr;
@@ -869,7 +893,7 @@ procedure TExprRegFunction.ScalarFunc(argc: integer);
 var B : Boolean;
 begin
   if (argc = 2) then begin
-    B := SinRegExpr(AsString(0), AsString(1));
+    B := rewRegExpr(AsString(0), AsString(1));
     SetResult(Integer(B));
   end else
     SetResultNil;
