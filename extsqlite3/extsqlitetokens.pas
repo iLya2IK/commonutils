@@ -110,7 +110,7 @@ type
 
     property OrigExpr : String read FOrigExpr write FOrigExpr;
     function FormatedStr(aKwOption : TSqliteKwFormatOption) : String;
-    function DeterminateKeywordFormat : TSqliteKwFormatOption;
+    function DetectKeywordFormat : TSqliteKwFormatOption;
     function HasClosingSemiColumn : Boolean;
     function Compare(aExpr : TSqliteExpr) : Boolean;
 
@@ -141,7 +141,7 @@ type
     property OrigExpr : String read FOrigExpr write FOrigExpr;
     function FormatedStr(aKwOption : TSqliteKwFormatOption; limit : Integer;
       const aSeparator : String = ' ') : String;
-    function DeterminateKeywordFormat : TSqliteKwFormatOption;
+    function DetectKeywordFormat : TSqliteKwFormatOption;
 
     function ExprAtPos(p : integer) : TSqliteExpr;
   end;
@@ -176,19 +176,20 @@ begin
   inherited Create;
 
   FOrigExpr:=aExprs;
-  MExpr := Utf8Trim(FOrigExpr);
-  CRegExpr := '(\s)*(((''([^'']|'''')*'')|("")|("([^"]|"")+")|(`([^`]|``)+`)|'+
-               '(\[.+\])|([0-9_a-zA-Z\*=\-+!<>%()\[\]/\.,&\|]+)|(\s+))+)($|;)';
+  MExpr := UTF8Trim(FOrigExpr, [u8tKeepStart]);
+  CRegExpr := '(\s*)(((begin(\s*)([^;]+?;)*?(\s*)end)|'+
+              '([^;]+?))+)($|;)';
   re := TRegExprWrapper.Create(CRegExpr);
   re.SetModifierR;
   try
-    if re.Exec(MExpr) then
+    if re.Exec(UTF8LowerCase(MExpr)) then
     begin
       repeat
         if re.SubExprMatchCount >= 2 then
         if re.MatchLen[2] > 0 then
         begin
-          AddExpr(re.Match[2], re.MatchPos[2], re.MatchLen[2]);
+          AddExpr(Utf8Copy(MExpr, re.MatchPos[2], re.MatchLen[2]),
+                                   re.MatchPos[2], re.MatchLen[2]);
         end;
       until not re.ExecNext;
     end;
@@ -256,7 +257,7 @@ begin
   end;
 end;
 
-function TSqliteExprs.DeterminateKeywordFormat : TSqliteKwFormatOption;
+function TSqliteExprs.DetectKeywordFormat : TSqliteKwFormatOption;
 var i : integer;
     l : TSqliteKwFormatOption;
     ar : Array [TSqliteKwFormatOption] of SmallInt;
@@ -264,7 +265,7 @@ begin
   for l := Low(TSqliteKwFormatOption) to High(TSqliteKwFormatOption) do
     ar[l] := 0;
   for i := 0 to Count-1 do
-    Inc(ar[Self[i].DeterminateKeywordFormat]);
+    Inc(ar[Self[i].DetectKeywordFormat]);
 
   Result := skfoUpperCase;
   i := 0;
@@ -401,7 +402,7 @@ begin
               '("([^"]|"")+")|'+
               '(`([^`]|``)+`)|'+
               '(\[.+\])|'+
-              '(\s+)|([\*=\-+;!<>%()\[\]/\.,&\|])';
+              '(\s+)|([\*=\-+;!<>\$%\(\)\[\]/\.,&\|])';
   re := TRegExprWrapper.Create(CRegExpr);
   re.SetModifierR;
   try
@@ -602,7 +603,7 @@ begin
   end;
 end;
 
-function TSqliteExpr.DeterminateKeywordFormat : TSqliteKwFormatOption;
+function TSqliteExpr.DetectKeywordFormat : TSqliteKwFormatOption;
 var i : integer;
     l : TSqliteKwFormatOption;
     ar : Array [TSqliteKwFormatOption] of SmallInt;
@@ -611,7 +612,7 @@ begin
     ar[l] := 0;
   for i := 0 to Count-1 do
   if Self[i].Kind = stkKeyWord then
-    Inc(ar[sqluDeterminateFormat(Self[i].Token)]);
+    Inc(ar[sqluDetectFormat(Self[i].Token)]);
 
   Result := skfoUpperCase;
   i := 0;

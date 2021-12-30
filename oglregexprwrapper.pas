@@ -47,6 +47,8 @@ type
   end;
 
 function rewRegExpr(const aInp, aExpr : String) : Boolean;
+function rewReplace(const ARegExpr, AInputStr, AReplaceStr: String;
+                                             AUseSubstitution: boolean): String;
 function rewRegExprVersionMajor : Integer;
 function rewRegExprVersionMinor : Integer;
 
@@ -62,6 +64,15 @@ begin
   finally
     re.Free;
   end;
+end;
+
+function rewReplace(const ARegExpr, AInputStr, AReplaceStr: String;
+  AUseSubstitution: boolean): String;
+begin
+  Result := UTF8Encode(ReplaceRegExpr(UnicodeString(ARegExpr),
+                                      UnicodeString(AInputStr),
+                                      UnicodeString(AReplaceStr),
+                                      AUseSubstitution));
 end;
 
 function rewRegExprVersionMajor : Integer;

@@ -22,30 +22,29 @@ uses
   ExtSqliteTokens;
 
 type
-
   TSqliteStmt = (stmtUnknown,
                  stmtPragma,
-                 stmtRelease,
-                 stmtRollback,
-                 stmtSavepoint,
-                 stmtCommit,
-                 stmtBegin,
-                 stmtSelect,
-                 stmtInsert,
-                 stmtUpdate,
-                 stmtUpsert,
-                 stmtReplace,
-                 stmtDelete,
-                 stmtAlterTable,
+                 stmtRelease,      //v
+                 stmtRollback,     //v
+                 stmtSavepoint,    //v
+                 stmtCommit,       //v
+                 stmtBegin,        //v
+                 stmtSelect,       //v
+                 stmtInsert,       //v
+                 stmtUpdate,       //v
+                 stmtUpsert,       //v
+                 stmtReplace,      //v
+                 stmtDelete,       //v
+                 stmtAlterTable,   //v
                  stmtCreateTrigger,
-                 stmtCreateTable,
-                 stmtCreateIndex,
+                 stmtCreateTable,  //v
+                 stmtCreateIndex,  //v
                  stmtCreateView,
                  stmtCreateVtable,
-                 stmtDropIndex,
-                 stmtDropTable,
-                 stmtDropTrigger,
-                 stmtDropView,
+                 stmtDropIndex,    //v
+                 stmtDropTable,    //v
+                 stmtDropTrigger,  //v
+                 stmtDropView,     //v
                  stmtAnalize);
 
   { TSqliteSynRule }
@@ -113,12 +112,10 @@ type
     constructor Create(aExpr : TSqliteExpr);
 
     class function CheckStmt(Kind : TSqliteStmt; aExpr : TSqliteExpr) : Boolean;
-    class function CheckIsCreateTable(aExpr : TSqliteExpr) : Boolean;
-    class function CheckIsBegin(aExpr : TSqliteExpr) : Boolean;
-    class function CheckIsCommit(aExpr : TSqliteExpr) : Boolean;
-    class function CheckIsSavepoint(aExpr : TSqliteExpr) : Boolean;
-    class function CheckIsRelease(aExpr : TSqliteExpr) : Boolean;
-    class function CheckIsRollback(aExpr : TSqliteExpr) : Boolean;
+    class function FindRuleForExpr(aExpr : TSqliteExpr) : TSqliteSynRule;
+    class function FindRule(const aExpr : String) : TSqliteSynRule;
+    class function FindStmtForExpr(aExpr : TSqliteExpr) : TSqliteStmt;
+    class function FindStmt(const aExpr : String) : TSqliteStmt;
 
     property ErrorCode : Integer read FErrorCode;
     property ErrorPos : Integer read GetErrorPos;
@@ -205,14 +202,29 @@ begin
 end;
 
 function TSqliteSynRule.GenRegExpr : String;
+var L0 : Integer;
 begin
-  //todo : design simple representation for sqlite syn rules
-  //       for example:
-  //       from rule
-  //         CREATE [TEMP,TEMPORARY] TABLE [IF NOT EXISTS] id1-2 (id1 id1*)
-  //       we must generate regexpr
-  //         CREATE( TEMP| TEMPORARY){0,1} TABLE( IF NOT EXISTS){0,1} (id1|id2) \( id1 (id1 )*\)
-  Result := FRule;
+  //simple representation for sqlite syn rules
+  //   for example:
+  //   from rule
+  //     CREATE[TEMP,TEMPORARY]TABLE[IF NOT EXISTS]id1-2(...)
+  //   we must generate regexpr
+  //     ^CREATE(TEMP|TEMPORARY){0,1}TABLE(IFNOTEXISTS){0,1}(id1|id2)\(.+\)($|;)
+  Result := StringReplace(FRule, ' ', '', [rfReplaceAll]);
+  Result := StringReplace(Result, '(', '\(', [rfReplaceAll]);
+  Result := StringReplace(Result, ')', '\)', [rfReplaceAll]);
+  Result := StringReplace(Result, '...', '(.+)', [rfReplaceAll]);
+  Result := StringReplace(Result, 'id1-2', '(id1|id2)', [rfReplaceAll]);
+  Result := rewReplace(',([A-Z]+)', Result, '|$1', true);
+  Result := rewReplace('([A-Z]+),', Result, '$1|', true);
+  Result := rewReplace('\{([A-Z\|]+)\}', Result, '($1){1}', true);
+  repeat
+   L0 := Length(Result);
+   Result := rewReplace('\[([^\[\]]+)\]', Result, '($1){0,1}', true);
+  until Length(Result) = L0;
+  Result := rewReplace('\<\<(.+)\>\>', Result, '($1(,){0,1})+', true);
+  Result := '^' + Result + '($|;)';
+
   if assigned(FWRegExpr) then
     FWRegExpr.Free;
   FWRegExpr := TRegExprWrapper.Create(Result);
@@ -243,22 +255,13 @@ end;
 
 class function TSqliteSynRules.GenerateSynCheckExpr(aExpr : TSqliteExpr
   ) : String;
-var i       : integer;
-    lstKind : TSqliteTokenKind;
+var i : integer;
 begin
-  lstKind := stkUnknown;
   Result := '';
   for i := 0 to aExpr.Count-1 do
   begin
-    if (i > 0) and
-       (lstKind <> aExpr[i].Kind) and
-       (aExpr[i].Kind <> stkSpace) and
-       (lstKind <> stkSpace) then
-    begin
-      Result := Result + ' ';
-    end;
     case aExpr[i].Kind of
-      stkSpace : Result := Result + ' ';
+      stkSpace : ;
       stkIdentifier : begin
         Result := Result + 'id' + Inttostr(aExpr[i].IdCnt);
       end;
@@ -271,7 +274,6 @@ begin
       stkSymbol :
         Result := Result + aExpr[i].Token;
     end;
-    lstKind := aExpr[i].Kind;
   end;
 end;
 
@@ -473,56 +475,79 @@ begin
   Result := vSynRules.CheckExpr(Kind, aExpr);
 end;
 
-class function TSqliteSynAnalizer.CheckIsCreateTable(aExpr : TSqliteExpr
-  ) : Boolean;
+class function TSqliteSynAnalizer.FindRuleForExpr(aExpr: TSqliteExpr
+  ): TSqliteSynRule;
 begin
-  Result := vSynRules.CheckExpr(stmtCreateTable, aExpr);
+  Result := vSynRules.FindRuleForExpr(aExpr);
 end;
 
-class function TSqliteSynAnalizer.CheckIsBegin(aExpr : TSqliteExpr) : Boolean;
+class function TSqliteSynAnalizer.FindRule(const aExpr: String): TSqliteSynRule;
+var Ex : TSqliteExpr;
 begin
-  Result := vSynRules.CheckExpr(stmtBegin, aExpr);
+  Ex := TSqliteExpr.Create(aExpr);
+  try
+    Result := vSynRules.FindRuleForExpr(Ex);
+  finally
+    Ex.Free;
+  end;
 end;
 
-class function TSqliteSynAnalizer.CheckIsCommit(aExpr : TSqliteExpr) : Boolean;
+class function TSqliteSynAnalizer.FindStmtForExpr(aExpr : TSqliteExpr
+  ) : TSqliteStmt;
+var R : TSqliteSynRule;
 begin
-  Result := vSynRules.CheckExpr(stmtCommit, aExpr);
+  R := FindRuleForExpr(aExpr);
+  if Assigned(R) then Result := R.Kind else
+                      Result := stmtUnknown;
 end;
 
-class function TSqliteSynAnalizer.CheckIsSavepoint(aExpr : TSqliteExpr
-  ) : Boolean;
+class function TSqliteSynAnalizer.FindStmt(const aExpr : String) : TSqliteStmt;
+var R : TSqliteSynRule;
 begin
-  Result := vSynRules.CheckExpr(stmtSavepoint, aExpr);
-end;
-
-class function TSqliteSynAnalizer.CheckIsRelease(aExpr : TSqliteExpr) : Boolean;
-begin
-  Result := vSynRules.CheckExpr(stmtRelease, aExpr);
-end;
-
-class function TSqliteSynAnalizer.CheckIsRollback(aExpr : TSqliteExpr
-  ) : Boolean;
-begin
-  Result := vSynRules.CheckExpr(stmtRollback, aExpr);
+  R := FindRule(aExpr);
+  if Assigned(R) then Result := R.Kind else
+                      Result := stmtUnknown;
 end;
 
 initialization
   vSynRules := TSqliteSynRules.Create;
   //todo : move to ext file
   vSynRules.AddRule(stmtRelease,
-                    'RELEASE( SAVEPOINT){0,1} id1(;|$)', true);
+                    'RELEASE[SAVEPOINT]id1', true);
   vSynRules.AddRule(stmtSavepoint,
-                    'SAVEPOINT id1(;|$)', true);
+                    'SAVEPOINT id1', true);
   vSynRules.AddRule(stmtCommit,
-                    '(COMMIT|END){1}( TRANSACTION){0,1}(;|$)', true);
+                    '{COMMIT,END}[TRANSACTION]', true);
   vSynRules.AddRule(stmtBegin,
-                    'BEGIN( DEFERRED| IMMEDIATE| EXCLUSIVE){0,1}( TRANSACTION){0,1}(;|$)', true);
+                    'BEGIN[DEFERRED,IMMEDIATE,EXCLUSIVE][TRANSACTION]', true);
   vSynRules.AddRule(stmtRollback,
-                    'ROLLBACK( TRANSACTION){0,1}( TO( SAVEPOINT){0,1} id1){0,1}(;|$)', false);
+                    'ROLLBACK[TRANSACTION][TO[SAVEPOINT]id1]', false);
   vSynRules.AddRule(stmtCreateTable,
-                    'CREATE( TEMP| TEMPORARY){0,1} TABLE( IF NOT EXISTS){0,1} (id1|id2) \( .+ \)(( WITHOUT ROWID| STRICT){1}( ,){0,1}){0,2}(;|$)', false);
+                    'CREATE[TEMP,TEMPORARY]TABLE[IF NOT EXISTS]id1-2(...)[<<{WITHOUT ROWID,STRICT}>>]', false);
+  vSynRules.AddRule(stmtAlterTable,
+                    'ALTER TABLE id1-2[RENAME TO,{RENAME,ADD,DROP}[COLUMN]]id1...', false);
+  vSynRules.AddRule(stmtCreateIndex,
+                    'CREATE[UNIQUE]INDEX[IF NOT EXISTS]id1-2 ON id1-2...', false);
   vSynRules.AddRule(stmtSelect,
-                    '^(WITH ((.+) AS( NOT){0,1}( MATERIALIZED){0,1} \( (SELECT |VALUES ){1}.+ \)(\,){0,1} )+){0,1}(SELECT |VALUES ){1}(.+)(;|$)', true);
+                    '[WITH[RECURSIVE]<<id1-2...AS[[NOT]MATERIALIZED]({SELECT,VALUES}...)>>]{SELECT,VALUES}...', true);
+  vSynRules.AddRule(stmtInsert,
+                    '[WITH[RECURSIVE]<<id1-2...AS[[NOT]MATERIALIZED]({SELECT,VALUES}...)>>]INSERT[OR{ABORT,FAIL,IGNORE,REPLACE,ROLLBACK}]INTOid1-2...[DEFAULT]VALUES...', false);
+  vSynRules.AddRule(stmtReplace,
+                    '[WITH[RECURSIVE]<<id1-2...AS[[NOT]MATERIALIZED]({SELECT,VALUES}...)>>]REPLACE INTO id1-2...[[DEFAULT]VALUES,SELECT]...', false);
+  vSynRules.AddRule(stmtUpdate,
+                    '[WITH[RECURSIVE]<<id1-2...AS[[NOT]MATERIALIZED]({SELECT,VALUES}...)>>]UPDATE[OR{ABORT,FAIL,IGNORE,REPLACE,ROLLBACK}]id1-2 SET...', false);
+  vSynRules.AddRule(stmtUpsert,
+                    'ON CONFLICT[...]DO{NOTHING,UPDATE SET}...', false);
+  vSynRules.AddRule(stmtDelete,
+                    '[WITH[RECURSIVE]<<id1-2...AS[[NOT]MATERIALIZED]({SELECT,VALUES}...)>>]DELETE FROM id1-2...', false);
+  vSynRules.AddRule(stmtDropIndex,
+                    'DROP INDEX [IF EXISTS] id1-2', false);
+  vSynRules.AddRule(stmtDropTable,
+                    'DROP TABLE [IF EXISTS] id1-2', false);
+  vSynRules.AddRule(stmtDropTrigger,
+                    'DROP TRIGGER [IF EXISTS] id1-2', false);
+  vSynRules.AddRule(stmtDropView,
+                    'DROP VIEW [IF EXISTS] id1-2', false);
 
 finalization
   if assigned(vSynRules) then

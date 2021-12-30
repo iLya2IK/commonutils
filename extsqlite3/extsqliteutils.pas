@@ -111,7 +111,7 @@ type
   function sqluFormatKeyWord(const KW : String;
                               aOption : TSqliteKwFormatOption =
                                                         skfoUpperCase) : String;
-  function sqluDeterminateFormat(const aToken : String) : TSqliteKwFormatOption;
+  function sqluDetectFormat(const aToken : String) : TSqliteKwFormatOption;
   function sqluGetKeyWordsList() : String;
   function sqluGetFunctionsList() : String;
   function sqluGetDataTypesList() : String;
@@ -459,7 +459,7 @@ begin
   end;
 end;
 
-function sqluDeterminateFormat(const aToken : String) : TSqliteKwFormatOption;
+function sqluDetectFormat(const aToken : String) : TSqliteKwFormatOption;
 begin
   if SameStr(LowerCase(aToken), aToken) then
   begin
