@@ -85,6 +85,7 @@ type
       matchLen : Integer);
     procedure AddToken(const aToken : String; akind : TSqliteTokenKind; matchPos,
       matchLen : Integer);
+    procedure AddSpaceIfNeeded;
     function GoNextNonspace(FromPos : Integer) : Integer;
   public
     constructor Create(const aExpr : String); overload;
@@ -113,6 +114,22 @@ type
     function DetectKeywordFormat : TSqliteKwFormatOption;
     function HasClosingSemiColumn : Boolean;
     function Compare(aExpr : TSqliteExpr) : Boolean;
+
+    //constructor methods
+    procedure AddK(kw : Word; fmt : TSqliteKwFormatOption); //add keyword
+    procedure AddKs(const kw : Array of Word; fmt : TSqliteKwFormatOption); //add keywords
+    procedure AddKw(const kw : String); //add not indexed keyword
+    procedure AddS(smb : Char); //add symbol
+    procedure AddId(const IdStr : String); //add identificator
+    procedure AddInt(V : Integer); //add number
+    procedure AddReal(V : Double); //add number
+    procedure AddStr(const V : String); //add str
+    procedure AddExpr(const aExpr : String); overload;
+    procedure AddExpr(aExpr : TSqliteExpr); overload;
+    procedure AddIdsListed(const Ids : array of String);
+    procedure OpenBracket;
+    procedure CloseBracket;
+    procedure Period;
 
     property Len : Integer read FLen;
     property Pos : Integer read FPos;
@@ -369,6 +386,20 @@ begin
   T.FPos := matchPos;
   T.FLen := matchLen;
   Add(T);
+end;
+
+procedure TSqliteExpr.AddSpaceIfNeeded;
+begin
+  if Count > 0 then
+  begin
+    if Self[Count-1].Kind <> stkSpace then
+    begin
+      if (Self[Count-1].Kind = stkSymbol) and
+         (Self[Count-1].SymbolOrd = STOK_BRACKET_OPEN) then
+         Exit;
+      AddToken(' ', stkSpace, 0, 0);
+    end;
+  end;
 end;
 
 function TSqliteExpr.GoNextNonspace(FromPos: Integer): Integer;
@@ -683,6 +714,129 @@ begin
       Inc(k2) else
       Exit(false);
   end;
+end;
+
+procedure TSqliteExpr.AddK(kw : Word; fmt : TSqliteKwFormatOption);
+var T : TSqliteToken;
+begin
+  AddSpaceIfNeeded;
+  T := TSqliteToken.Create(sqluGetIndexedKeyWord(kw, fmt), stkKeyWord);
+  T.FTag[0] := kw;
+  FLastNSToken := T;
+  Add(T);
+end;
+
+procedure TSqliteExpr.AddKs(const kw : array of Word;
+  fmt : TSqliteKwFormatOption);
+var T : TSqliteToken;
+    i : integer;
+begin
+  for i := Low(kw) to High(kw) do
+  begin
+    AddSpaceIfNeeded;
+    T := TSqliteToken.Create(sqluGetIndexedKeyWord(kw[i], fmt), stkKeyWord);
+    T.FTag[0] := kw[i];
+    FLastNSToken := T;
+    Add(T);
+  end;
+end;
+
+procedure TSqliteExpr.AddKw(const kw : String);
+begin
+  AddSpaceIfNeeded;
+  AddToken(kw, stkKeyWord, 0, 0);
+end;
+
+procedure TSqliteExpr.AddS(smb : Char);
+var T : TSqliteToken;
+begin
+  if not (smb in [',', ')']) then
+    AddSpaceIfNeeded;
+  T := TSqliteToken.Create(smb, stkSymbol);
+  T.FTag[0] := Ord(smb);
+  FLastNSToken := T;
+  Add(T);
+end;
+
+procedure TSqliteExpr.AddId(const IdStr : String);
+var T : TSqliteToken;
+begin
+  AddSpaceIfNeeded;
+  T := TSqliteToken.Create(IdStr, stkIdentifier);
+  T.FTag[1] := 1;
+  if sqluCheckIsNeedQuoted(IdStr) then
+    T.FTag[0] := 8;
+  FLastNSToken := T;
+  Add(T);
+end;
+
+procedure TSqliteExpr.AddInt(V : Integer);
+begin
+  AddSpaceIfNeeded;
+  AddToken(Inttostr(V), stkNumber, 0, 0);
+end;
+
+procedure TSqliteExpr.AddReal(V : Double);
+begin
+  AddSpaceIfNeeded;
+  AddToken(FloatToStr(V), stkNumber, 0, 0);
+end;
+
+procedure TSqliteExpr.AddStr(const V : String);
+begin
+  AddSpaceIfNeeded;
+  AddToken(V, stkString, 0, 0);
+end;
+
+procedure TSqliteExpr.AddExpr(const aExpr : String);
+var Expr : TSqliteExpr;
+begin
+  Expr := TSqliteExpr.Create(aExpr);
+  try
+    AddExpr(Expr);
+  finally
+    Expr.Free;
+  end;
+end;
+
+procedure TSqliteExpr.AddExpr(aExpr : TSqliteExpr);
+var i : integer;
+    T : TSqliteToken;
+begin
+  if aExpr.Count > 0 then
+  begin
+    AddSpaceIfNeeded;
+    for i := 0 to aExpr.Count-1 do
+    begin
+      T := TSqliteToken.Create(aExpr[i]);
+      Add(T);
+    end;
+  end;
+end;
+
+procedure TSqliteExpr.AddIdsListed(const Ids : array of String);
+var i : integer;
+begin
+  for i := Low(Ids) to High(Ids) do
+  begin
+    if i > Low(ids) then Period;
+    AddId(Ids[i]);
+  end;
+end;
+
+procedure TSqliteExpr.OpenBracket;
+begin
+  AddS('(');
+end;
+
+procedure TSqliteExpr.CloseBracket;
+begin
+  AddS(')');
+end;
+
+procedure TSqliteExpr.Period;
+begin
+  AddS(',');
 end;
 
 function TSqliteExpr.TokenAtPos(p : integer) : TSqliteToken;

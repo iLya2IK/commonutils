@@ -189,12 +189,23 @@ const
   kwSAVEPOINT: Word = 56;
   kwRELEASE: Word = 57;
   kwTO: Word = 58;
+  kwALTER : Word = 59;
+  kwRENAME : Word = 60;
+  kwADD : Word = 61;
+  kwDROP : Word = 62;
+  kwPRAGMA : Word = 63;
+  kwINSERT : Word = 64;
+  kwSELECT : Word = 65;
+  kwINTO   : Word = 66;
+  kwFROM   : Word = 67;
+  kwOR     : Word = 68;
+  kwVALUES : Word = 69;
 
 implementation
 
 uses LazUTF8;
 
-const cMaxIndexedKeyWords = 58;
+const cMaxIndexedKeyWords = 69;
 
 const
   sqliteAvaibleKeyWords : Array [0..cMaxIndexedKeyWords] of string =
@@ -209,7 +220,9 @@ const
      'MATCH', 'DEFERRABLE', 'DELETE', 'UPDATE', 'INITIALLY',
      'SET', 'CASCADE', 'RESTRICT', 'DEFERRED', 'IMMEDIATE',
      'ACTION', 'NO', 'FOREIGN', 'BEGIN', 'TRANSACTION',
-     'EXCLUSIVE', 'COMMIT', 'END', 'SAVEPOINT', 'RELEASE', 'TO');
+     'EXCLUSIVE', 'COMMIT', 'END', 'SAVEPOINT', 'RELEASE', 'TO',
+     'ALTER', 'RENAME', 'ADD', 'DROP', 'PRAGMA', 'INSERT', 'SELECT',
+     'INTO', 'FROM', 'OR', 'VALUES');
 
 const
   sqliteAffinity : Array [TSqliteDataTypeAffinity] of string= (

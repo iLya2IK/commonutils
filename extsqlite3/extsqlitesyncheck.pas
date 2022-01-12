@@ -210,7 +210,7 @@ begin
   //     CREATE[TEMP,TEMPORARY]TABLE[IF NOT EXISTS]id1-2(...)
   //   we must generate regexpr
   //     ^CREATE(TEMP|TEMPORARY){0,1}TABLE(IFNOTEXISTS){0,1}(id1|id2)\(.+\)($|;)
-  Result := StringReplace(FRule, ' ', '', [rfReplaceAll]);
+  Result := rewReplace('\s+', FRule, '', false);
   Result := StringReplace(Result, '(', '\(', [rfReplaceAll]);
   Result := StringReplace(Result, ')', '\)', [rfReplaceAll]);
   Result := StringReplace(Result, '...', '(.+)', [rfReplaceAll]);
@@ -525,21 +525,21 @@ initialization
   vSynRules.AddRule(stmtCreateTable,
                     'CREATE[TEMP,TEMPORARY]TABLE[IF NOT EXISTS]id1-2(...)[<<{WITHOUT ROWID,STRICT}>>]', false);
   vSynRules.AddRule(stmtAlterTable,
-                    'ALTER TABLE id1-2[RENAME TO,{RENAME,ADD,DROP}[COLUMN]]id1...', false);
+                    'ALTER TABLE id1-2[RENAME TO,{RENAME,ADD,DROP}[COLUMN]]id1[...]', false);
   vSynRules.AddRule(stmtCreateIndex,
                     'CREATE[UNIQUE]INDEX[IF NOT EXISTS]id1-2 ON id1-2...', false);
   vSynRules.AddRule(stmtSelect,
                     '[WITH[RECURSIVE]<<id1-2...AS[[NOT]MATERIALIZED]({SELECT,VALUES}...)>>]{SELECT,VALUES}...', true);
   vSynRules.AddRule(stmtInsert,
-                    '[WITH[RECURSIVE]<<id1-2...AS[[NOT]MATERIALIZED]({SELECT,VALUES}...)>>]INSERT[OR{ABORT,FAIL,IGNORE,REPLACE,ROLLBACK}]INTOid1-2...[DEFAULT]VALUES...', false);
+                    '[WITH[RECURSIVE]<<id1-2...AS[[NOT]MATERIALIZED]({SELECT,VALUES}...)>>]INSERT[OR{ABORT,FAIL,IGNORE,REPLACE,ROLLBACK}]INTOid1-2...[DEFAULT]VALUES[...]', false);
   vSynRules.AddRule(stmtReplace,
-                    '[WITH[RECURSIVE]<<id1-2...AS[[NOT]MATERIALIZED]({SELECT,VALUES}...)>>]REPLACE INTO id1-2...[[DEFAULT]VALUES,SELECT]...', false);
+                    '[WITH[RECURSIVE]<<id1-2...AS[[NOT]MATERIALIZED]({SELECT,VALUES}...)>>]REPLACE INTO id1-2...[[DEFAULT]VALUES,SELECT][...]', false);
   vSynRules.AddRule(stmtUpdate,
                     '[WITH[RECURSIVE]<<id1-2...AS[[NOT]MATERIALIZED]({SELECT,VALUES}...)>>]UPDATE[OR{ABORT,FAIL,IGNORE,REPLACE,ROLLBACK}]id1-2 SET...', false);
   vSynRules.AddRule(stmtUpsert,
-                    'ON CONFLICT[...]DO{NOTHING,UPDATE SET}...', false);
+                    'ON CONFLICT[...]DO{NOTHING,UPDATE SET}[...]', false);
   vSynRules.AddRule(stmtDelete,
-                    '[WITH[RECURSIVE]<<id1-2...AS[[NOT]MATERIALIZED]({SELECT,VALUES}...)>>]DELETE FROM id1-2...', false);
+                    '[WITH[RECURSIVE]<<id1-2...AS[[NOT]MATERIALIZED]({SELECT,VALUES}...)>>]DELETE FROM id1-2[...]', false);
   vSynRules.AddRule(stmtDropIndex,
                     'DROP INDEX [IF EXISTS] id1-2', false);
   vSynRules.AddRule(stmtDropTable,
