@@ -714,6 +714,7 @@ begin
       Inc(k2) else
       Exit(false);
   end;
+  Result := true;
 end;
 
 procedure TSqliteExpr.AddK(kw : Word; fmt : TSqliteKwFormatOption);
