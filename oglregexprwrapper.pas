@@ -40,6 +40,9 @@ type
     property MatchLen[index : integer] : integer read GetMatchLen;
     function SubExprMatchCount : Integer;
     procedure SetModifierR;
+    procedure SetModifierM;
+    procedure SetModifierI;
+    procedure SetModifierG;
 
     class function GetRusSmallLettersRange : String;
 
@@ -51,6 +54,7 @@ function rewReplace(const ARegExpr, AInputStr, AReplaceStr: String;
                                              AUseSubstitution: boolean): String;
 function rewRegExprVersionMajor : Integer;
 function rewRegExprVersionMinor : Integer;
+function rewRegExprVersionStr   : String;
 
 implementation
 
@@ -83,6 +87,12 @@ end;
 function rewRegExprVersionMinor : Integer;
 begin
   Result := TRegExpr.VersionMinor;
+end;
+
+function rewRegExprVersionStr : String;
+begin
+  Result := IntToStr(rewRegExprVersionMajor) + '.' +
+            IntToStr(rewRegExprVersionMinor);
 end;
 
 { TRegExprWrapper }
@@ -125,6 +135,21 @@ end;
 procedure TRegExprWrapper.SetModifierR;
 begin
   rexp.ModifierR := true;
+end;
+
+procedure TRegExprWrapper.SetModifierM;
+begin
+  rexp.ModifierM := true;
+end;
+
+procedure TRegExprWrapper.SetModifierI;
+begin
+  rexp.ModifierI := true;
+end;
+
+procedure TRegExprWrapper.SetModifierG;
+begin
+  rexp.ModifierG := true;
 end;
 
 class function TRegExprWrapper.GetRusSmallLettersRange: String;

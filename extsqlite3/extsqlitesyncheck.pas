@@ -23,6 +23,7 @@ uses
 
 type
   TSqliteStmt = (stmtUnknown,
+                 stmtComment,      //v
                  stmtPragma,
                  stmtRelease,      //v
                  stmtRollback,     //v
@@ -59,6 +60,8 @@ type
   public
     constructor Create(aKind : TSqliteStmt; const aRule : String;
       aReadOnly : Boolean);
+    constructor CreateRegExpr(aKind : TSqliteStmt; const aRule : String;
+      aReadOnly : Boolean);
     destructor Destroy; override;
     function Check(const S : String) : Boolean;
     function GenRegExpr : String;
@@ -79,6 +82,8 @@ type
 
     procedure AddRule(aName : TSqliteStmt;
                        const aRule: String; aRO: Boolean);
+    procedure AddRuleRegExpr(aName : TSqliteStmt;
+                       const aRule : String; aRO : Boolean);
 
     function CheckExpr(aRule : TSqliteStmt;
                        const aExpr : String) : Boolean; overload;
@@ -190,6 +195,17 @@ begin
   FReadOnly := aReadOnly;
 end;
 
+constructor TSqliteSynRule.CreateRegExpr(aKind : TSqliteStmt;
+  const aRule : String; aReadOnly : Boolean);
+begin
+  FKind := aKind;
+  FRule := aRule;
+  FWRegExpr := nil;
+  FRegExpr := aRule;
+  FWRegExpr := TRegExprWrapper.Create(FRegExpr);
+  FReadOnly := aReadOnly;
+end;
+
 destructor TSqliteSynRule.Destroy;
 begin
   if Assigned(FWRegExpr) then FWRegExpr.Free;
@@ -261,7 +277,7 @@ begin
   for i := 0 to aExpr.Count-1 do
   begin
     case aExpr[i].Kind of
-      stkSpace : ;
+      stkSpace, stkComment : ;
       stkIdentifier : begin
         Result := Result + 'id' + Inttostr(aExpr[i].IdCnt);
       end;
@@ -282,6 +298,15 @@ procedure TSqliteSynRules.AddRule(aName : TSqliteStmt; const aRule : String;
 var R : TSqliteSynRule;
 begin
   R := TSqliteSynRule.Create(aName, aRule, aRO);
+  if Assigned(FExprTree[aName]) then FExprTree[aName].Free;
+  FExprTree[aName] := R;
+end;
+
+procedure TSqliteSynRules.AddRuleRegExpr(aName : TSqliteStmt;
+  const aRule : String; aRO : Boolean);
+var R : TSqliteSynRule;
+begin
+  R := TSqliteSynRule.CreateRegExpr(aName, aRule, aRO);
   if Assigned(FExprTree[aName]) then FExprTree[aName].Free;
   FExprTree[aName] := R;
 end;
@@ -512,6 +537,10 @@ end;
 initialization
   vSynRules := TSqliteSynRules.Create;
   //todo : move to ext file
+  vSynRules.AddRuleRegExpr(stmtComment,
+                    '^(--.*)|(\/\*.*?\*\/)$', true);
+  vSynRules.AddRule(stmtPragma,
+                    'PRAGMA id1-2 {=...,(...)}', true);
   vSynRules.AddRule(stmtRelease,
                     'RELEASE[SAVEPOINT]id1', true);
   vSynRules.AddRule(stmtSavepoint,

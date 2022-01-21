@@ -68,6 +68,9 @@ type
   end;
 
 
+  function sqluGetVersionNum : Integer;
+  function sqluGetVersionStr : String;
+
   function sqluConstraintKindToStr(aKind : TSqliteConstrKind) : String;
   function sqluTableOptionKindToStr(aKind : TSqliteTableOption) : String;
 
@@ -283,6 +286,16 @@ procedure DestroyExprChecker();
 begin
   if Assigned(vSqliteCheckerDB) then
     vSqliteCheckerDB.Free;
+end;
+
+function sqluGetVersionNum : Integer;
+begin
+  Result := sqlite3_libversion_number();
+end;
+
+function sqluGetVersionStr : String;
+begin
+  Result := StrPas(sqlite3_libversion());
 end;
 
 function sqluConstraintKindToStr(aKind : TSqliteConstrKind) : String;

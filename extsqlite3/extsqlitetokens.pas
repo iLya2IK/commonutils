@@ -23,9 +23,8 @@ type
   TSqliteToken = class;
 
   TSqliteTokenKind = (stkUnknown,
-                      stkKeyWord,
-                      stkDataType,
-                      stkSymbol, stkSpace,
+                      stkKeyWord, stkDataType,
+                      stkSymbol, stkSpace, stkComment,
                       stkIdentifier, stkTableName, stkFieldName,
                       stkNumber, stkString);
   TSqliteTokenKinds = set of TSqliteTokenKind;
@@ -194,8 +193,10 @@ begin
 
   FOrigExpr:=aExprs;
   MExpr := UTF8Trim(FOrigExpr, [u8tKeepStart]);
-  CRegExpr := '(\s*)(((begin(\s*)([^;]+?;)*?(\s*)end)|'+
-              '([^;]+?))+)($|;)';
+  CRegExpr := '(\s*)((((begin(\s*)([^;]+?(;|$|(\*\/)))*?(\s*)end)|'+
+              '(--.*$)|(\/\*.*?\*\/)|([^;]+?))+)($|;))'; // with comments
+              {'(\s*)(((begin(\s*)([^;]+?;)*?(\s*)end)|'+
+              '([^;]+?))+)($|;)'; } // without comments
   re := TRegExprWrapper.Create(CRegExpr);
   re.SetModifierR;
   try
@@ -316,47 +317,50 @@ procedure TSqliteExpr.AddTokenStr(const aToken: String; grpIndx : Byte;
 var S : String;
 begin
   case grpIndx of
-    1 :
+    1, 3 : begin
+        AddToken(aToken, stkComment, matchPos, matchLen);
+      end;
+    4 :
     begin
       if (sqluCheckKeyWord(UTF8UpperCase(aToken)) > 0) then
         AddToken(aToken, stkKeyWord, matchPos, matchLen)
       else
         AddToken(aToken, stkIdentifier, matchPos, matchLen);
     end;
-    2, 3 :
+    5, 6 :
     begin
       AddToken(aToken, stkNumber, matchPos, matchLen);
     end;
-    5, 7 : begin
+    8, 10 : begin
       S := UTF8Copy(aToken, 2, UTF8Length(aToken) - 2);
       S := UTF8StringReplace(S, '''''', '''', [rfReplaceAll]);
       AddToken(S, stkString, matchPos, matchLen);
     end;
-    8 : begin
+    11 : begin
       S := UTF8Copy(aToken, 2, UTF8Length(aToken) - 2);
       S := UTF8StringReplace(S, '""', '"', [rfReplaceAll]);
       AddToken(S, stkIdentifier, matchPos, matchLen);
       if sqluCheckIsNeedQuoted(S) then
         Self[Count-1].FTag[0] := 1;
       end;
-    10 : begin
+    13 : begin
       S := UTF8Copy(aToken, 2, UTF8Length(aToken) - 2);
       S := UTF8StringReplace(S, '``', '`', [rfReplaceAll]);
       AddToken(S, stkIdentifier, matchPos, matchLen);
       if sqluCheckIsNeedQuoted(S) then
         Self[Count-1].FTag[0] := 1;
       end;
-    12 : begin
+    15 : begin
       S := UTF8Copy(aToken, 2, UTF8Length(aToken) - 2);
       AddToken(S, stkIdentifier, matchPos, matchLen);
       if sqluCheckIsNeedQuoted(S) then
         Self[Count-1].FTag[0] := 2;
       end;
-    13  :
+    16  :
     begin
       AddToken(aToken, stkSpace, matchPos, matchLen);
     end;
-    14  :
+    17  :
     begin
       AddToken(aToken, stkSymbol, matchPos, matchLen);
     end;
@@ -381,7 +385,7 @@ begin
     //\*=\-+;!<>%()\[\]/\.,&|
     T.FTag[0] := Ord(aToken[1]);
   end;
-  if aKind <> stkSpace then
+  if not (aKind in [stkSpace, stkComment]) then
     FLastNSToken := T;
   T.FPos := matchPos;
   T.FLen := matchLen;
@@ -409,7 +413,7 @@ begin
   for ind := FromPos+1 to count-1 do
   begin
     Inc(Result);
-    if Self[Result].Kind <> stkSpace then begin
+    if not (Self[Result].Kind in [stkSpace, stkComment]) then begin
       Exit;
     end;
   end;
@@ -426,7 +430,9 @@ begin
 
   FLastNSToken := nil;
   FOrigExpr:=aExpr;
-  CRegExpr := '([_a-zA-Z]+[0-9_a-zA-Z]*)|'+
+  CRegExpr := '(--.*?(\x0a|$))|'+
+              '(\/\*.*?\*\/)|'+
+              '([_a-zA-Z]+[0-9_a-zA-Z]*)|'+
               '(0[xX]\d+)|'+
               '([+\-]{0,1}\d*\.{0,1}\d+([eE][\-+]{0,1}\d+){0,1})|'+
               '(''([^'']|'''')*'')|("")|'+
@@ -611,7 +617,7 @@ function TSqliteExpr.IsEmpty : Boolean;
 var i : integer;
 begin
   for i := 0 to Count-1 do
-  if not (Self[i].Kind in [stkSpace, stkSymbol]) then
+  if not (Self[i].Kind in [stkSpace, stkSymbol, stkComment]) then
   begin
     Exit(false);
   end;
@@ -662,7 +668,7 @@ var i : integer;
 begin
   for i := Count-1 downto 0 do
   begin
-    if Self[i].Kind = stkSpace then
+    if Self[i].Kind in [stkSpace, stkComment] then
     begin
       Continue;
     end else
@@ -683,7 +689,7 @@ begin
   k2 := 0;
   while (k1 < Count) do
   begin
-    if (Self[k1].Kind = stkSpace) then
+    if (Self[k1].Kind in [stkSpace, stkComment]) then
     begin
       inc(k1);
       Continue;
@@ -691,7 +697,7 @@ begin
 
     while (k2 < aExpr.Count) do
     begin
-      if (aExpr[k2].Kind = stkSpace) then
+      if (aExpr[k2].Kind in [stkSpace, stkComment]) then
         Inc(k2) else
         Break;
     end;
@@ -710,7 +716,7 @@ begin
   end;
   while (k2 < aExpr.Count) do
   begin
-    if (aExpr[k2].Kind = stkSpace) then
+    if (aExpr[k2].Kind in [stkSpace, stkComment]) then
       Inc(k2) else
       Exit(false);
   end;
