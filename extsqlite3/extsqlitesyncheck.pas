@@ -540,7 +540,7 @@ initialization
   vSynRules.AddRuleRegExpr(stmtComment,
                     '^(--.*)|(\/\*.*?\*\/)$', true);
   vSynRules.AddRule(stmtPragma,
-                    'PRAGMA id1-2 {=...,(...)}', true);
+                    'PRAGMA id1-2 ...', true);
   vSynRules.AddRule(stmtRelease,
                     'RELEASE[SAVEPOINT]id1', true);
   vSynRules.AddRule(stmtSavepoint,

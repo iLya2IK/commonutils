@@ -49,7 +49,7 @@ type
   TSqliteDataTypeAffinity = (dtaUnknown, dtaInteger, dtaText,
                              dtaBlob, dtaReal, dtaNumeric);
 
-  TSqliteKwFormatOption = (skfoOriginal, skfoUpperCase, skfoLowerCase, skfoFromCapit);
+  TSqliteKwFormatOption = (skfoOriginal, skfoUpperCase, skfoLowerCase, skfoWithCapit);
 
   { TSqliteMemoryDB }
 
@@ -480,7 +480,7 @@ begin
     skfoOriginal  : Result := KW;
     skfoLowerCase : Result := LowerCase(KW);
     skfoUpperCase : Result := UpperCase(KW);
-    skfoFromCapit : Result := UpperCase(Copy(KW, 1, 1)) +
+    skfoWithCapit : Result := UpperCase(Copy(KW, 1, 1)) +
                               LowerCase(Copy(KW, 2, Length(KW)-1));
   end;
 end;
@@ -495,7 +495,7 @@ begin
   begin
     Result := skfoUpperCase;
   end else
-    Result := skfoFromCapit;
+    Result := skfoWithCapit;
 end;
 
 function sqluGetKeyWordsList() : String;
