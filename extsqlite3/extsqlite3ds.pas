@@ -60,6 +60,8 @@ type
   { TSqlite3Function }
   TSqlite3Function = class
   private
+    FConnected : Boolean;
+    FEncode : Cardinal;
     FName : String;
     FTextEncode : TSqlite3TextEncode;
     FFuncStyle  : TSqlite3FuncStyle;
@@ -1423,8 +1425,20 @@ end;
 procedure TExtSqlite3Dataset.ClearFunctions;
 var i : integer;
 begin
-  for i := 0 to FFunctions.Count-1 do
-     FFunctions[i].Disconnect;
+  if Assigned(FSqliteHandle) then
+  begin
+    for i := 0 to FFunctions.Count-1 do
+    if FFunctions[i].FConnected then
+    begin
+      sqlite3_create_function(FSqliteHandle, pansichar(FFunctions[i].fName),
+                                             FFunctions[i].FParCnt,
+                                             FFunctions[i].FEncode,
+                                             pointer(FFunctions[i]),
+                                             nil, nil, nil);
+    end;
+  end else
+    for i := 0 to FFunctions.Count-1 do
+      FFunctions[i].Disconnect;
   FFunctions.Clear;
 end;
 
@@ -2004,6 +2018,8 @@ begin
   FTextEncode := aTextEncode;
   FDeterministic := isDeterministic;
   FParCnt:= aParCnt;
+  FEncode := 0;
+  FConnected := False;
 end;
 
 destructor TSqlite3Function.Destroy;
@@ -2148,21 +2164,22 @@ begin
 end;
 
 procedure TSqlite3Function.Reconnect(db: psqlite3);
-var aEncode : Cardinal;
 begin
-  if FDeterministic then aEncode := SQLITE_DETERMINISTIC else aEncode := 0;
-  aEncode := aEncode or GetSqlite3TextEncode(FTextEncode);
+  if FDeterministic then FEncode := SQLITE_DETERMINISTIC else FEncode := 0;
+  FEncode := FEncode or GetSqlite3TextEncode(FTextEncode);
+
   if FFuncStyle = sqlfScalar then
   begin
     sqlite3_create_function_v2(db, pansichar(fName), FParCnt,
-                                   aEncode, pointer(self),
+                                   FEncode, pointer(self),
                                    @scalar_func, nil, nil, @destroy_func);
   end else
   begin
     sqlite3_create_function_v2(db, pansichar(fName), FParCnt,
-                                   aEncode, pointer(self),
+                                   FEncode, pointer(self),
                                    nil, @step_func, @final_func, @destroy_func);
   end;
+  FConnected := true;
 end;
 
 procedure TSqlite3Function.ScalarFunc({%H-}argc: integer);
@@ -2182,7 +2199,7 @@ end;
 
 procedure TSqlite3Function.Disconnect;
 begin
-  //abstract
+  FConnected := false;
 end;
 
 end.
