@@ -2,7 +2,7 @@ unit OGLRegExprWrapper;
 
 {$mode objfpc}{$H+}
 {.$define regexpr_new}
-{$define regexpr_t}
+{.$define regexpr_t}
 {$ifdef regexpr_new}{$define regexpr_nt}{$endif}
 {$ifdef regexpr_t}{$define regexpr_nt}{$endif}
 

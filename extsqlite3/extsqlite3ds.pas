@@ -174,6 +174,7 @@ type
     property Res : String read fRes;
   end;
 
+  TSqliteExecuteResult = (erError, erOkNoData, erOkWithData);
   TSqlitePrepOpenMode = (pomAutoFillColumns, pomDirect);
 
   {TSqlite3PreparedHolder}
@@ -201,14 +202,14 @@ type
     procedure Reconnect(db : psqlite3);
     function BindParametres(const Params : Array of Const) : Boolean;
     function ReturnString : String;
-    function ExecTo(const Params : Array of Const; aCons : TSqliteConsumeHolder) : Boolean;
+    function ExecTo(const Params : Array of Const; aCons : TSqliteConsumeHolder) : TSqliteExecuteResult;
   public
     constructor Create(aOwner : TSqlite3Prepared);
     function QuickQuery(const Params : Array of Const; const AStrList: TStrings; FillObjects:Boolean): String;
     procedure Execute(const Params : Array of Const);
-    function ExecToValue(const Params : Array of Const; aValues : PSqliteVariantArray) : Boolean;
-    function ExecToValue(const Params : Array of Const; aValues : TStream; withHeaders : Boolean) : Boolean;
-    function ExecToValue(const Params : Array of Const; aValues : Pointer; aSize : PtrInt) : Boolean;
+    function ExecToValue(const Params : Array of Const; aValues : PSqliteVariantArray) : TSqliteExecuteResult;
+    function ExecToValue(const Params : Array of Const; aValues : TStream; withHeaders : Boolean) : TSqliteExecuteResult;
+    function ExecToValue(const Params : Array of Const; aValues : Pointer; aSize : PtrInt) : TSqliteExecuteResult;
     procedure Disconnect;
     {$ifdef extra_prepared_thread_safe}
     procedure Lock; inline;
@@ -268,14 +269,14 @@ type
     function QuickQuery(const Params : Array of Const; const AStrList: TStrings; FillObjects:Boolean): String; virtual;
     procedure Execute(const Params : Array of Const); virtual;
     procedure Execute; overload;
-    function ExecToValue(const Params : Array of Const; aValues : PSqliteVariantArray) : Boolean;
-    function ExecToValue(const Params : Array of Const; aValues : TStream; withHeaders : Boolean) : Boolean; overload;
-    function ExecToValue(const Params : Array of Const; aValues : Pointer; aSize : PtrInt) : Boolean; overload;
-    function ExecToValue(const Params : Array of Const; var aValues) : Boolean; overload;
-    function ExecToValue(aValues : PSqliteVariantArray) : Boolean; overload;
-    function ExecToValue(aValues : TStream; withHeaders : Boolean) : Boolean; overload;
-    function ExecToValue(aValues : Pointer; aSize : PtrInt) : Boolean; overload;
-    function ExecToValue(var aValues) : Boolean; overload;
+    function ExecToValue(const Params : Array of Const; aValues : PSqliteVariantArray) : TSqliteExecuteResult;
+    function ExecToValue(const Params : Array of Const; aValues : TStream; withHeaders : Boolean) : TSqliteExecuteResult; overload;
+    function ExecToValue(const Params : Array of Const; aValues : Pointer; aSize : PtrInt) : TSqliteExecuteResult; overload;
+    function ExecToValue(const Params : Array of Const; var aValues) : TSqliteExecuteResult; overload;
+    function ExecToValue(aValues : PSqliteVariantArray) : TSqliteExecuteResult; overload;
+    function ExecToValue(aValues : TStream; withHeaders : Boolean) : TSqliteExecuteResult; overload;
+    function ExecToValue(aValues : Pointer; aSize : PtrInt) : TSqliteExecuteResult; overload;
+    function ExecToValue(var aValues) : TSqliteExecuteResult; overload;
     procedure Disconnect; virtual;
     {$ifdef extra_prepared_thread_safe}
     procedure Lock; inline;
@@ -335,7 +336,7 @@ type
     procedure ConsumeRow(aRecord : PPAnsiChar; ColumnCount : integer);
     procedure SetDefaultStringSize(AValue: Integer);
     procedure DoRequestPrepared(const aRequest : String; aResult : Integer);
-    function ExecTo(const ASQL: String; aCons : TSqliteConsumeHolder) : Boolean;
+    function ExecTo(const ASQL: String; aCons : TSqliteConsumeHolder) : TSqliteExecuteResult;
   protected
     procedure BuildLinkedList; override;
     function GetLastInsertRowId: Int64; override;
@@ -365,9 +366,9 @@ type
 
     procedure ExecuteDirect(const ASQL: String); override;
     function QuickQuery(const ASQL: String; const AStrList: TStrings; FillObjects: Boolean): String; override;
-    function ExecToValue(const ASQL: String; aValues : PSqliteVariantArray) : Boolean;
-    function ExecToValue(const ASQL: String; aValues : Pointer; aSize : PtrInt) : Boolean;
-    function ExecToValue(const ASQL: String; var aValues) : Boolean; overload;
+    function ExecToValue(const ASQL: String; aValues : PSqliteVariantArray) : TSqliteExecuteResult;
+    function ExecToValue(const ASQL: String; aValues : Pointer; aSize : PtrInt) : TSqliteExecuteResult;
+    function ExecToValue(const ASQL: String; var aValues) : TSqliteExecuteResult; overload;
 
     procedure Open(aMode : TExtSqlite3OpenMode); overload;
     function  GetFieldData(Field: TField; Buffer: Pointer; NativeFormat: Boolean): Boolean; override;
@@ -636,7 +637,7 @@ begin
 end;
 
 function TSqlite3Prepared.ExecToValue(const Params : array of const;
-  aValues : PSqliteVariantArray) : Boolean;
+  aValues : PSqliteVariantArray) : TSqliteExecuteResult;
 begin
   {$ifdef extra_prepared_thread_safe}
   Lock;
@@ -651,7 +652,7 @@ begin
 end;
 
 function TSqlite3Prepared.ExecToValue(const Params : array of const;
-  aValues : TStream; withHeaders : Boolean) : Boolean;
+  aValues : TStream; withHeaders : Boolean) : TSqliteExecuteResult;
 begin
   {$ifdef extra_prepared_thread_safe}
   Lock;
@@ -666,7 +667,7 @@ begin
 end;
 
 function TSqlite3Prepared.ExecToValue(const Params : array of const;
-  aValues : Pointer; aSize : PtrInt) : Boolean;
+  aValues : Pointer; aSize : PtrInt) : TSqliteExecuteResult;
 begin
   {$ifdef extra_prepared_thread_safe}
   Lock;
@@ -681,29 +682,29 @@ begin
 end;
 
 function TSqlite3Prepared.ExecToValue(const Params : array of const; var aValues
-  ) : Boolean;
+  ) : TSqliteExecuteResult;
 begin
   Result := ExecToValue(Params, @aValues, Sizeof(aValues));
 end;
 
-function TSqlite3Prepared.ExecToValue(aValues : PSqliteVariantArray) : Boolean;
+function TSqlite3Prepared.ExecToValue(aValues : PSqliteVariantArray) : TSqliteExecuteResult;
 begin
   Result := ExecToValue([], aValues);
 end;
 
 function TSqlite3Prepared.ExecToValue(aValues : TStream;
-                                              withHeaders : Boolean) : Boolean;
+                                              withHeaders : Boolean) : TSqliteExecuteResult;
 begin
   Result := ExecToValue([], aValues, withHeaders);
 end;
 
 function TSqlite3Prepared.ExecToValue(aValues : Pointer; aSize : PtrInt
-  ) : Boolean;
+  ) : TSqliteExecuteResult;
 begin
   Result := ExecToValue([], aValues, aSize);
 end;
 
-function TSqlite3Prepared.ExecToValue(var aValues) : Boolean;
+function TSqlite3Prepared.ExecToValue(var aValues) : TSqliteExecuteResult;
 begin
   Result := ExecToValue([], @aValues, Sizeof(aValues));
 end;
@@ -878,11 +879,11 @@ begin
 end;
 
 function TSqlite3PreparedHolder.ExecTo(const Params : array of const;
-  aCons : TSqliteConsumeHolder) : Boolean;
+  aCons : TSqliteConsumeHolder) : TSqliteExecuteResult;
 var c : integer;
 begin
-  if not ready then exit(False);
-  if not BindParametres(Params) then Exit(False);
+  if not ready then exit(erError);
+  if not BindParametres(Params) then Exit(erError);
   FReturnCode := sqlite3_step(vm);
   if (FReturnCode = SQLITE_ROW) or
      (FReturnCode = SQLITE_DONE) then
@@ -894,12 +895,12 @@ begin
       if c > 0 then
       begin
         aCons.Consume(c);
-        Result := true;
+        Result := erOkWithData;
       end else
-        Result := false;
-    end else Result := true;
+        Result := erError;
+    end else Result := erOkNoData;
   end else
-    Result := false;
+    Result := erError;
   sqlite3_reset(vm);
   FOwner.DoPostExecute;
 end;
@@ -922,7 +923,7 @@ var aCons : TSqliteConsumeQueryHolder;
 begin
   aCons := TSqliteConsumeQueryHolder.Create(vm, AStrList, FillObjects);
   try
-    if ExecTo(Params, aCons) then
+    if ExecTo(Params, aCons) = erOkWithData then
       Result := aCons.Res
     else
       Result := '';
@@ -941,7 +942,7 @@ begin
 end;
 
 function TSqlite3PreparedHolder.ExecToValue(const Params : array of const;
-  aValues : PSqliteVariantArray) : Boolean;
+  aValues : PSqliteVariantArray) : TSqliteExecuteResult;
 var aCons : TSqliteConsumeVarHolder;
 begin
   aCons := TSqliteConsumeVarHolder.Create(vm, aValues);
@@ -953,7 +954,7 @@ begin
 end;
 
 function TSqlite3PreparedHolder.ExecToValue(const Params : array of const;
-  aValues : TStream; withHeaders : Boolean) : Boolean;
+  aValues : TStream; withHeaders : Boolean) : TSqliteExecuteResult;
 var aCons : TSqliteConsumeStrHolder;
 begin
   aCons := TSqliteConsumeStrHolder.Create(vm, aValues, withHeaders);
@@ -965,7 +966,7 @@ begin
 end;
 
 function TSqlite3PreparedHolder.ExecToValue(const Params : array of const;
-  aValues : Pointer; aSize : PtrInt) : Boolean;
+  aValues : Pointer; aSize : PtrInt) : TSqliteExecuteResult;
 var aCons : TSqliteConsumePtrHolder;
 begin
   aCons := TSqliteConsumePtrHolder.Create(vm, aValues, aSize);
@@ -1509,7 +1510,7 @@ var aCons : TSqliteConsumeQueryHolder;
 begin
   aCons := TSqliteConsumeQueryHolder.Create(nil, AStrList, FillObjects);
   try
-    if ExecTo(ASQL, aCons) then
+    if ExecTo(ASQL, aCons) = erOkWithData then
       Result := aCons.Res
     else
       Result := '';
@@ -1519,7 +1520,7 @@ begin
 end;
 
 function TExtSqlite3Dataset.ExecToValue(const ASQL : String;
-  aValues : PSqliteVariantArray) : Boolean;
+  aValues : PSqliteVariantArray) : TSqliteExecuteResult;
 var aCons : TSqliteConsumeVarHolder;
 begin
   aCons := TSqliteConsumeVarHolder.Create(nil, aValues);
@@ -1531,7 +1532,7 @@ begin
 end;
 
 function TExtSqlite3Dataset.ExecToValue(const ASQL : String; aValues : Pointer;
-  aSize : PtrInt) : Boolean;
+  aSize : PtrInt) : TSqliteExecuteResult;
 var aCons : TSqliteConsumePtrHolder;
 begin
   aCons := TSqliteConsumePtrHolder.Create(nil, aValues, aSize);
@@ -1543,7 +1544,7 @@ begin
 end;
 
 function TExtSqlite3Dataset.ExecToValue(const ASQL : String; var aValues
-  ) : Boolean;
+  ) : TSqliteExecuteResult;
 begin
   Result := ExecToValue(ASQL, @aValues, SizeOf(aValues));
 end;
@@ -1851,8 +1852,8 @@ begin
     FOnPrepared(aRequest, aResult);
 end;
 
-function TExtSqlite3Dataset.ExecTo(const ASQL : String;
-  aCons : TSqliteConsumeHolder) : Boolean;
+function TExtSqlite3Dataset.ExecTo(const ASQL: String;
+  aCons: TSqliteConsumeHolder): TSqliteExecuteResult;
 var c : integer;
     vm : psqlite3_stmt;
 begin
@@ -1876,12 +1877,12 @@ begin
         if c > 0 then
         begin
           aCons.Consume(c);
-          Result := true;
+          Result := erOkWithData;
         end else
-          Result := false;
-      end else Result := true;
+          Result := erError;
+      end else Result := erOkNoData;
     end else
-      Result := false;
+      Result := erError;
     sqlite3_finalize(vm);
   finally
     UnLock;
