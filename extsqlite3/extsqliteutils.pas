@@ -69,6 +69,8 @@ type
 
 
   function sqluGetVersionNum : Integer;
+  function sqluGetVersionMagNum : Integer;
+  function sqluGetVersionMinNum : Integer;
   function sqluGetVersionStr : String;
 
   function sqluConstraintKindToStr(aKind : TSqliteConstrKind) : String;
@@ -203,12 +205,13 @@ const
   kwFROM   : Word = 67;
   kwOR     : Word = 68;
   kwVALUES : Word = 69;
+  kwNOTNULL: Word = 70;
 
 implementation
 
 uses LazUTF8;
 
-const cMaxIndexedKeyWords = 69;
+const cMaxIndexedKeyWords = 70;
 
 const
   sqliteAvaibleKeyWords : Array [0..cMaxIndexedKeyWords] of string =
@@ -225,7 +228,7 @@ const
      'ACTION', 'NO', 'FOREIGN', 'BEGIN', 'TRANSACTION',
      'EXCLUSIVE', 'COMMIT', 'END', 'SAVEPOINT', 'RELEASE', 'TO',
      'ALTER', 'RENAME', 'ADD', 'DROP', 'PRAGMA', 'INSERT', 'SELECT',
-     'INTO', 'FROM', 'OR', 'VALUES');
+     'INTO', 'FROM', 'OR', 'VALUES', 'NOTNULL');
 
 const
   sqliteAffinity : Array [TSqliteDataTypeAffinity] of string= (
@@ -291,6 +294,16 @@ end;
 function sqluGetVersionNum : Integer;
 begin
   Result := sqlite3_libversion_number();
+end;
+
+function sqluGetVersionMagNum: Integer;
+begin
+  Result :=  sqluGetVersionNum div 1000000;
+end;
+
+function sqluGetVersionMinNum: Integer;
+begin
+  Result :=  sqluGetVersionNum mod 1000000 div 1000;
 end;
 
 function sqluGetVersionStr : String;

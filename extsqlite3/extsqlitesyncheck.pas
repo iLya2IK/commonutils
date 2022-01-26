@@ -39,6 +39,7 @@ type
                  stmtAlterTable,   //v
                  stmtCreateTrigger,
                  stmtCreateTable,  //v
+                 stmtCreateTableAs,//v
                  stmtCreateIndex,  //v
                  stmtCreateView,
                  stmtCreateVtable,
@@ -553,6 +554,8 @@ initialization
                     'ROLLBACK[TRANSACTION][TO[SAVEPOINT]id1]', false);
   vSynRules.AddRule(stmtCreateTable,
                     'CREATE[TEMP,TEMPORARY]TABLE[IF NOT EXISTS]id1-2(...)[<<{WITHOUT ROWID,STRICT}>>]', false);
+  vSynRules.AddRule(stmtCreateTableAs,
+                    'CREATE[TEMP,TEMPORARY]TABLE[IF NOT EXISTS]id1-2 AS ...', false);
   vSynRules.AddRule(stmtAlterTable,
                     'ALTER TABLE id1-2[RENAME TO,{RENAME,ADD,DROP}[COLUMN]]id1[...]', false);
   vSynRules.AddRule(stmtCreateIndex,
