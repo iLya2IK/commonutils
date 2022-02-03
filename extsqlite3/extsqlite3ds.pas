@@ -118,6 +118,14 @@ type
   TSqliteVariantArray = Array [0..MaxInt shr 8] of Variant;
   PSqliteVariantArray = ^TSqliteVariantArray;
 
+  TSqliteBlobPointer = record
+    SizeOfData : Int64;
+    Data : Pointer;
+    destr : sqlite3_destructor_type;
+  end;
+
+  PSqliteBlobPointer = ^TSqliteBlobPointer;
+
   { TSqliteConsumeHolder }
 
   TSqliteConsumeHolder = class
@@ -193,6 +201,7 @@ type
       aMode : TSqlitePrepOpenMode) : Boolean;
     procedure ConsumeColumns;
     function GetColumn(Index : Integer): String;
+    function GetColumnBlob(Index : Integer) : TSqliteBlobPointer;
     function GetColumnCount: Integer;
     function GetColumnDouble(Index : Integer): Double;
     function GetColumnInt32(Index : Integer): Int32;
@@ -228,6 +237,7 @@ type
     property AsPChar[Index : Integer] : PChar read GetColumnPChar;
     property AsInt32[Index : Integer] : Int32 read GetColumnInt32;
     property AsInt64[Index : Integer] : Int64 read GetColumnInt64;
+    property AsBlob[Index : Integer] : TSqliteBlobPointer read GetColumnBlob;
   end;
 
   {$ifdef prepared_multi_holders}
@@ -249,6 +259,7 @@ type
     FExpr       : String;
     FOnPostExecute : TNotifyEvent;
     function GetColumnPChar(Index : Integer) : PChar;
+    function GetColumnBlob(Index : Integer) : TSqliteBlobPointer;
     function GetThreadHolder : TSqlite3PreparedHolder;{$ifndef prepared_multi_holders}inline;{$endif}
     function GetColumn(Index : Integer): String;
     function GetColumnCount: integer;
@@ -295,6 +306,7 @@ type
     property AsString[Index : Integer] : String read GetColumnString;
     property AsInt32[Index : Integer] : Int32 read GetColumnInt32;
     property AsInt64[Index : Integer] : Int64 read GetColumnInt64;
+    property AsBlob[Index : Integer] : TSqliteBlobPointer read GetColumnBlob;
 
     property OnPostExecute : TNotifyEvent read FOnPostExecute write FOnPostExecute;
   end;
@@ -544,6 +556,12 @@ end;
 function TSqlite3Prepared.GetColumnPChar(Index : Integer) : PChar;
 begin
   Result := GetThreadHolder.AsPChar[index];
+end;
+
+function TSqlite3Prepared.GetColumnBlob(Index : Integer
+  ) : TSqliteBlobPointer;
+begin
+  Result := GetThreadHolder.AsBlob[index];
 end;
 
 procedure TSqlite3Prepared.Reconnect(db : psqlite3);
@@ -806,6 +824,14 @@ begin
   Result := sqlite3_column_text(vm,Index);
 end;
 
+function TSqlite3PreparedHolder.GetColumnBlob(Index : Integer
+  ) : TSqliteBlobPointer;
+begin
+  Result.Data := sqlite3_column_blob(vm,Index);
+  Result.SizeOfData := sqlite3_column_bytes(vm,Index);
+  Result.destr := nil;
+end;
+
 function TSqlite3PreparedHolder.GetColumnString(Index : Integer): String;
 begin
   Result := String(sqlite3_column_text(vm,Index));
@@ -834,7 +860,13 @@ begin
                        pcharstr(UTF8Encode(WideCharToString(VWideString))),
                        length(WideCharToString(VWideString)), @freebindstring);
           vtPointer    : If (VPointer=Nil) then
-                           FReturnCode := sqlite3_bind_null(vm, p);
+                           FReturnCode := sqlite3_bind_null(vm, p) else
+                         begin
+                           FReturnCode := sqlite3_bind_blob64(vm, p,
+                                                                  PSqliteBlobPointer(VPointer)^.Data,
+                                                                  PSqliteBlobPointer(VPointer)^.SizeOfData,
+                                                                  PSqliteBlobPointer(VPointer)^.destr);
+                         end;
           vtInt64      : FReturnCode := sqlite3_bind_int64(vm, p, VInt64^);
           vtQWord      : FReturnCode := sqlite3_bind_int64(vm, p, VQWord^);
           vtVariant    : begin
