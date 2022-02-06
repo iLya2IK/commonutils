@@ -999,8 +999,7 @@ function TFastSeq.EraseObjectsByCriteria(criteria : TFindObjectCriteria;
   data : pointer) : Boolean;
 var P, NP : TIteratorObject;
 begin
-  Result := false;
-  if not assigned(criteria) then Exit;
+  if not assigned(criteria) then Exit(false);
 
   P := ListBegin;
   while P <> nil do
@@ -1013,6 +1012,8 @@ begin
     end;
     P := NP;
   end;
+
+  Result := false;
 end;
 
 function TFastSeq.ExtractObjectsByCriteria(criteria : TFindObjectCriteria;

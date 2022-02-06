@@ -46,18 +46,6 @@ type
     function HasExternReferences : Boolean;
   end;
 
-  { TNetReferenceList }
-
-  TNetReferenceList = class(TNetCustomLockedObject)
-  private
-    FList : TFastSeq;
-  public
-    constructor Create;
-    destructor Destroy; override;
-    procedure Add(const O : TNetReferencedObject);
-    procedure CleanDead;
-  end;
-
   TNetReferenceOnDisconnect = procedure (v : TNetReferencedObject) of object;
 
   { TNetReferenceHolderList }
@@ -327,6 +315,17 @@ type
   end;
 
   TThreadSafeFastSeq = class(specialize TThreadSafeFastBaseSeq<TObject>);
+
+  { TNetReferenceList }
+
+  TNetReferenceList = class(TThreadSafeFastSeq)
+  private
+    function IfNoReferences(obj : Tobject; ptr : pointer) : Boolean;
+  public
+    destructor Destroy; override;
+    procedure Add(const O : TNetReferencedObject);
+    procedure CleanDead;
+  end;
 
   { TReferencedStream }
 
@@ -1180,52 +1179,30 @@ end;
 
 { TNetReferenceList }
 
-constructor TNetReferenceList.Create;
-begin
-  inherited Create;
-  FList := TFastSeq.Create;
-end;
-
 destructor TNetReferenceList.Destroy;
 begin
-  while FList.Count > 0 do
+  while Count > 0 do
   begin
     CleanDead;
     Sleep(0);
   end;
-  FList.Free;
   inherited Destroy;
 end;
 
 procedure TNetReferenceList.Add(const O: TNetReferencedObject);
 begin
-  Lock;
-  try
-    FList.Push_back(O);
-  finally
-    UnLock;
-  end;
+  Push_back(O);
 end;
 
 procedure TNetReferenceList.CleanDead;
-var v, v2 : TIteratorObject;
 begin
-  Lock;
-  try
-    v := FList.ListBegin;
-    while (v <> FList.ListEnd) do
-    begin
-      if TNetReferencedObject(v.Value).mReferenceCount <= 0 then
-      begin
-        v2 := v.Next;
-        FList.Erase(v);
-        v := v2;
-      end else
-        v := v.Next;
-    end;
-  finally
-    UnLock;
-  end;
+  EraseObjectsByCriteria(@IfNoReferences, nil);
+end;
+
+function TNetReferenceList.IfNoReferences(obj : Tobject; ptr : pointer
+  ) : Boolean;
+begin
+  Result := TNetReferencedObject(obj).mReferenceCount <= 0;
 end;
 
 { TNetReferencedObject }
