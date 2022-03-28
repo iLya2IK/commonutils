@@ -608,7 +608,8 @@ end;
 
 destructor TThreadPointer.Destroy;
 begin
-  FreeMem(FValue);
+  if Assigned(FValue) then
+    FreeMem(FValue);
   inherited Destroy;
 end;
 
