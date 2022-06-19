@@ -14,6 +14,7 @@
 unit ExtSqliteUtils;
 
 {$mode objfpc}{$H+}
+{$define USE_NATIVE_KEYWORDS_ROUTES}
 
 interface
 
@@ -91,9 +92,13 @@ type
   {$ELSE}
     {$DEFINE S}
   {$ENDIF}
+
+  {$IFDEF USE_NATIVE_KEYWORDS_ROUTES}
   {$IFDEF S}function{$ELSE}var{$ENDIF} sqlite3_keyword_count{$IFDEF D}: function{$ENDIF}(): cint;cdecl;{$IFDEF S}external Sqlite3Lib;{$ENDIF}
   {$IFDEF S}function{$ELSE}var{$ENDIF} sqlite3_keyword_name{$IFDEF D}: function{$ENDIF}(n:cint;res:ppansichar;l:pcint):cint;cdecl;{$IFDEF S}external Sqlite3Lib;{$ENDIF}
   {$IFDEF S}function{$ELSE}var{$ENDIF} sqlite3_keyword_check{$IFDEF D}: function{$ENDIF}(expr:pansichar;l:cint):cint;cdecl;{$IFDEF S}external Sqlite3Lib;{$ENDIF}
+  {$ENDIF}
+
   {$IFDEF S}function{$ELSE}var{$ENDIF} sqlite3_stricmp{$IFDEF D}: function{$ENDIF}(expr1, expr2:pansichar):cint;cdecl;{$IFDEF S}external Sqlite3Lib;{$ENDIF}
   {$IFDEF S}function{$ELSE}var{$ENDIF} sqlite3_strnicmp{$IFDEF D}: function{$ENDIF}(expr1, expr2:pansichar;l:cint):cint;cdecl;{$IFDEF S}external Sqlite3Lib;{$ENDIF}
 
@@ -102,8 +107,10 @@ type
   {$IFDEF LOAD_DYNAMICALLY}
   procedure InitializeSqlite3ExtFuncs;
   {$ENDIF}
+  {$IFDEF USE_NATIVE_KEYWORDS_ROUTES}
   function sqluGetKeyWordCount : Integer;
   function sqluGetKeyWordName(N : Integer) : String;
+  {$ENDIF}
   function sqluGetIndexedKeyWordCount() : Integer;
   function sqluGetIndexedKeyWordInd(const KW : String) : Integer;
   function sqluGetIndexedKeyWord(Index : Cardinal;
@@ -437,15 +444,18 @@ const DEFAULT_THREAD_HOLDER_CNT = 1;
 {$IFDEF LOAD_DYNAMICALLY}
 procedure InitializeSqlite3ExtFuncs;
 begin
+  {$IFDEF USE_NATIVE_KEYWORDS_ROUTES}
   pointer(sqlite3_keyword_count) := GetProcedureAddress(LibHandle,'sqlite3_keyword_count');
   pointer(sqlite3_keyword_name) := GetProcedureAddress(LibHandle,'sqlite3_keyword_name');
   pointer(sqlite3_keyword_check) := GetProcedureAddress(LibHandle,'sqlite3_keyword_check');
+  {$ENDIF}
   pointer(sqlite3_strnicmp) := GetProcedureAddress(LibHandle,'sqlite3_strnicmp');
   pointer(sqlite3_stricmp) := GetProcedureAddress(LibHandle,'sqlite3_stricmp');
   pointer(sqlite3_stmt_readonly) := GetProcedureAddress(LibHandle,'sqlite3_stmt_readonly');
 end;
 {$ENDIF}
 
+{$IFDEF USE_NATIVE_KEYWORDS_ROUTES}
 function sqluGetKeyWordCount: Integer;
 begin
   result := sqlite3_keyword_count;
@@ -465,6 +475,21 @@ begin
     Result := '';
 end;
 
+{$ENDIF}
+
+function sqluCheckKeyWord(const KW: String): Integer;
+begin
+  {$IFDEF USE_NATIVE_KEYWORDS_ROUTES}
+  Result := sqlite3_keyword_check(@(KW[1]), Length(KW));
+  if Result = 0 then begin
+    if SameStr(UpperCase(KW), sqliteAvaibleKeyWords[kwROWID]) then
+      Result := $0f01;
+  end;
+  {$ELSE}
+  Result := sqluGetIndexedKeyWordInd(KW) + 1;
+  {$ENDIF}
+end;
+
 function sqluGetIndexedKeyWords(const Indexes : array of Cardinal;
   aOption : TSqliteKwFormatOption) : String;
 var i : integer;
@@ -474,15 +499,6 @@ begin
   begin
     if i > 0 then Result := Result + ' ';
     Result := Result + sqluGetIndexedKeyWord(Indexes[i], aOption);
-  end;
-end;
-
-function sqluCheckKeyWord(const KW: String): Integer;
-begin
-  Result := sqlite3_keyword_check(@(KW[1]), Length(KW));
-  if Result = 0 then begin
-    if SameStr(UpperCase(KW), sqliteAvaibleKeyWords[kwROWID]) then
-      Result := $0f01;
   end;
 end;
 
@@ -519,9 +535,14 @@ begin
   try
     SL.Sorted := true;
     SL.Duplicates := dupIgnore;
+    {$IFDEF USE_NATIVE_KEYWORDS_ROUTES}
     for i := 1 to sqluGetKeyWordCount do
       SL.Add(sqluGetKeyWordName(i));
     SL.Add(sqliteAvaibleKeyWords[kwROWID]);
+    {$ELSE}
+    for i := 0 to High(sqliteAvaibleKeyWords) do
+      SL.Add(sqliteAvaibleKeyWords[i]);
+    {$ENDIF}
     SL.Delimiter := ',';
     Result := LowerCase(SL.DelimitedText);
   finally

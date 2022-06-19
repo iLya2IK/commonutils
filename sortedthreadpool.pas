@@ -36,10 +36,10 @@ type
     constructor Create;
     //set NeedToRestart = true if need to restart job
     //after execution
-    procedure RestartJob(aHoldDelay : Cardinal; aHoldStart : QWord);
+    procedure RestartJob(aHoldDelay : Cardinal; const aHoldStart : QWord);
     property NeedToRestart : Boolean read FNeedToRestart write FNeedToRestart;
     property HoldOnValueMs : Cardinal read FHoldOnValueMs write FHoldOnValueMs;
-    function IsReady(TS: QWord): Boolean;
+    function IsReady(const TS: QWord): Boolean;
     procedure Execute; virtual; abstract;
   end;
 
@@ -99,9 +99,8 @@ type
     FJob : TLinearJob;
     FThreadKind : TThreadPoolThreadKind;
     FSleepTime : TThreadJobToJobWait;
-    FCurSleepTime : Integer;
     FWaitedJobs : TFastCollection;
-    function ProceedWaitingJobs(TS: QWord) : TLinearJob;
+    function ProceedWaitingJobs(const TS: QWord) : TLinearJob;
     procedure SendForWaiting(j: TLinearJob);
     function GetRunning: Boolean;
     function GetSleepTime: TJobToJobWait;
@@ -137,8 +136,8 @@ type
     function GetRunning: Boolean;
     function GetRunningThreads: Integer;
     procedure ExcludeThread(aThread : TSortedCustomThread);
-    function GetSortedJob(TS: QWord): TSortedJob;
-    function GetLinearJob(TS: QWord): TLinearJob;
+    function GetSortedJob(const TS: QWord): TSortedJob;
+    function GetLinearJob(const TS: QWord): TLinearJob;
     function GetSortedJobsCount: Integer;
     function GetSortedThreadsCount: integer;
     function GetThreadJobToJobWait: TJobToJobWait;
@@ -182,7 +181,7 @@ implementation
 
 { TLinearJob }
 
-function TLinearJob.IsReady(TS: QWord): Boolean;
+function TLinearJob.IsReady(const TS: QWord): Boolean;
 begin
   if FHoldOnValueMs > 0 then
   begin
@@ -199,7 +198,7 @@ begin
   FHoldStart:= 0;
 end;
 
-procedure TLinearJob.RestartJob(aHoldDelay: Cardinal; aHoldStart: QWord);
+procedure TLinearJob.RestartJob(aHoldDelay: Cardinal; const aHoldStart: QWord);
 begin
   FNeedToRestart := true;
   FHoldStart := aHoldStart;
@@ -239,11 +238,7 @@ procedure TThreadJobToJobWait.AdaptDropToMin(var AValue: Integer);
 begin
   Lock;
   try
-    if FValue.AdaptMax >
-       FValue.AdaptMin then
-    begin
-      AValue := FValue.AdaptMin;
-    end;
+    AValue := FValue.AdaptMin;
   finally
     UnLock;
   end;
@@ -253,13 +248,9 @@ procedure TThreadJobToJobWait.AdaptToDec(var AValue: Integer);
 begin
   Lock;
   try
-    if FValue.AdaptMax >
-       FValue.AdaptMin then
-    begin
-      AValue := AValue shr 1;
-      if AValue < FValue.AdaptMin then
-         AValue := FValue.AdaptMin;
-    end;
+    AValue := AValue shr 1;
+    if AValue < FValue.AdaptMin then
+       AValue := FValue.AdaptMin;
   finally
     UnLock;
   end;
@@ -269,13 +260,10 @@ procedure TThreadJobToJobWait.AdaptToInc(var AValue: Integer);
 begin
   Lock;
   try
-    if FValue.AdaptMax >
-       FValue.AdaptMin then
-    begin
-      AValue := AValue shl 1;
-      if AValue > FValue.AdaptMax then
-         AValue := FValue.AdaptMax;
-    end;
+    if AValue <= 0 then AValue := 1 else
+                        AValue := AValue shl 1;
+    if AValue > FValue.AdaptMax then
+       AValue := FValue.AdaptMax;
   finally
     UnLock;
   end;
@@ -335,7 +323,7 @@ end;
 
 { TSortedThreadPool }
 
-function TSortedThreadPool.GetSortedJob(TS : QWord): TSortedJob;
+function TSortedThreadPool.GetSortedJob(const TS : QWord) : TSortedJob;
 var JN : TAvgLvlTreeNode;
 begin
   FSortedListLocker.Lock;
@@ -359,7 +347,7 @@ begin
   end;
 end;
 
-function TSortedThreadPool.GetLinearJob(TS : QWord): TLinearJob;
+function TSortedThreadPool.GetLinearJob(const TS : QWord) : TLinearJob;
 begin
   Result := TLinearJob(FLinearList.PopValue);
   if assigned(Result) then
@@ -665,7 +653,7 @@ end;
 
 { TSortedCustomThread }
 
-function TSortedCustomThread.ProceedWaitingJobs(TS: QWord): TLinearJob;
+function TSortedCustomThread.ProceedWaitingJobs(const TS : QWord) : TLinearJob;
 var i : integer;
     j : TLinearJob;
 begin
@@ -735,7 +723,9 @@ var
   j: TLinearJob;
   TS : QWord;
   s, k : boolean;
+  FCurSleepTime : Integer;
 begin
+  FCurSleepTime := FSleepTime.Value.DefaultValue;
   s := false;
   while not Terminated do
   begin
@@ -767,13 +757,13 @@ begin
           myJob := j;
           try
             j.Execute;
-            if j.NeedToRestart then
-            begin
-              SendForWaiting(j);
-              j := nil;
-            end;
           except
             //Raise;
+          end;
+          if j.NeedToRestart then
+          begin
+            SendForWaiting(j);
+            j := nil;
           end;
         finally
           FRunning.Value := False;
@@ -795,7 +785,6 @@ begin
   FOwner := AOwner;
   FRunning := TThreadBoolean.Create(False);
   FSleepTime:= TThreadJobToJobWait.Create(aSleepTime);
-  FCurSleepTime := aSleepTime.DefaultValue;
   FThreadKind := TThreadPoolThreadKind.Create(AKind);
   inherited Create(False);
   FreeOnTerminate := true;
