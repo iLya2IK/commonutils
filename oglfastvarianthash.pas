@@ -31,9 +31,13 @@ type
   TFastHashTable = array[0..MaxFastHashTableSize - 1] of Integer;
 
   IFastHashList = interface
+    ['{7F5D2738-1562-4204-A58F-F839AA012BAE}']
     Function Get(AName: LongWord): Variant;
+    Function GetDefault(AName: LongWord; const ADefault : Variant): Variant;
+    Function FindIndexOf(const AName:LongWord): Integer;
     Function GetAtPos(Index: Integer): TFastHashItem;
     Function Add(const AName:LongWord;Item: Variant): Integer;
+    procedure Exclude(const AName : LongWord);
     function Count: Integer;
     property Items[Index: LongWord]: Variant read Get; default;
     property AtPos[Index: Integer]: TFastHashItem read GetAtPos;
@@ -50,11 +54,11 @@ type
     { Hash }
     FHashTable    : PFastHashTable;
     FHashCapacity : Integer;
-    function GetAtPos(Index: Integer): TFastHashItem;
     function GetPtAtPos(Index: Integer): PFastHashItem;
     Function InternalFind(AHash:LongWord;out PrevIndex:Integer):Integer;
   protected
     Function Get(AName: LongWord): Variant;
+    function GetAtPos(Index: Integer): TFastHashItem;
     Procedure SetCapacity(NewCapacity: Integer);
     Procedure SetCount(NewCount: Integer);
     Procedure AddToHashTable(Index: Integer);
@@ -69,9 +73,11 @@ type
     Function HashOfIndex(Index: Integer): LongWord;
     Function GetNextCollision(Index: Integer): Integer;
     Procedure Delete(Index: Integer);
+    procedure Exclude(const AName : LongWord);
     Function Expand: TFastHashList;
     Function Find(const AName:LongWord): Variant;
     Function FindIndexOf(const AName:LongWord): Integer;
+    Function GetDefault(AName: LongWord; const ADefault : Variant): Variant;
     Function GetHashOfValue(const aValue : Variant) : LongWord;
     property Capacity: Integer read FCapacity write SetCapacity;
     property Items[AName: LongWord]: Variant read Get; default;
@@ -250,6 +256,14 @@ begin
     end;
 end;
 
+procedure TFastHashList.Exclude(const AName : LongWord);
+var ind : integer;
+begin
+  ind := FindIndexOf(AName);
+  if ind >= 0 then
+    Delete(ind);
+end;
+
 function TFastHashList.Expand: TFastHashList;
 var
   IncSize : Longint;
@@ -283,6 +297,17 @@ var
   PrevIndex : Integer;
 begin
   Result:=InternalFind(AName,PrevIndex);
+end;
+
+function TFastHashList.GetDefault(AName : LongWord; const ADefault : Variant
+  ) : Variant;
+var index : integer;
+begin
+  index := FindIndexOf(AName);
+  if index >= 0 then
+    Result := GetAtPos(index).Data
+  else
+    Result := ADefault;
 end;
 
 function TFastHashList.GetHashOfValue(const aValue: Variant): LongWord;
