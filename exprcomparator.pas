@@ -658,6 +658,7 @@ begin
     FTokens := ReAllocMem(FTokens, FTokensCap * Sizeof(TSinToken));
   end;
   Result := @(FTokens^[FTokensCnt]);
+  FillByte(Result^, Sizeof(TSinToken), 0);
   Inc(FTokensCnt);
 end;
 
@@ -783,13 +784,29 @@ begin
 end;
 
 procedure TSinExpr.WriteToData(const Str : RawByteString);
-var l : integer;
+var l, i, FOldDataSize : integer;
+    FOldData : PChar;
 begin
   l := Length(Str);
   If FDataSize < (FDataLoc + l) then
   begin
+    FOldDataSize := FDataSize;
+    FOldData := FData;
+
     Inc(FDataSize, 256);
-    FData := ReAllocMem(FData, FDataSize);
+    FData := GetMem(FDataSize);
+    Move(FOldData^, FData^, FOldDataSize);
+    if (FData <> FOldData) then
+    begin
+      for i := 0 to FTokensCnt-1 do
+      begin
+        if Assigned(FTokens^[i].RawToken) then
+          FTokens^[i].RawToken := PChar(PtrUInt(FData) + PtrUInt(FTokens^[i].RawToken) - PtrUInt(FOldData));
+        if Assigned(FTokens^[i].RawCyrToken) then
+          FTokens^[i].RawCyrToken := PChar(PtrUInt(FData) + PtrUInt(FTokens^[i].RawCyrToken) - PtrUInt(FOldData));
+      end;
+    end;
+    FreeMem(FOldData);
   end;
   Move(Str[1], PChar(FData + FDataLoc)^, l);
   Inc(FDataLoc, l);

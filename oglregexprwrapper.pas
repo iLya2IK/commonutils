@@ -61,10 +61,10 @@ implementation
 function rewRegExpr(const aInp, aExpr : String) : Boolean;
 var re : TRegExpr;
 begin
-  re := TRegExpr.Create(UnicodeString(aExpr));
+  re := TRegExpr.Create(RegExprString(aExpr));
   re.ModifierR := true;
   try
-    Result := re.Exec(UnicodeString(aInp));
+    Result := re.Exec(RegExprString(aInp));
   finally
     re.Free;
   end;
@@ -73,9 +73,9 @@ end;
 function rewReplace(const ARegExpr, AInputStr, AReplaceStr: String;
   AUseSubstitution: boolean): String;
 begin
-  Result := UTF8Encode(ReplaceRegExpr(UnicodeString(ARegExpr),
-                                      UnicodeString(AInputStr),
-                                      UnicodeString(AReplaceStr),
+  Result := UTF8Encode(ReplaceRegExpr(RegExprString(ARegExpr),
+                                      RegExprString(AInputStr),
+                                      RegExprString(AReplaceStr),
                                       AUseSubstitution));
 end;
 
@@ -114,12 +114,12 @@ end;
 
 constructor TRegExprWrapper.Create(const Expr: String);
 begin
-  rexp := TRegExpr.Create(UnicodeString(Expr));
+  rexp := TRegExpr.Create(RegExprString(Expr));
 end;
 
 function TRegExprWrapper.Exec(const Expr: String): Boolean;
 begin
-  Result := rexp.Exec(UnicodeString(Expr));
+  Result := rexp.Exec(RegExprString(Expr));
 end;
 
 function TRegExprWrapper.ExecNext: Boolean;

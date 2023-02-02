@@ -37,6 +37,8 @@ type
     procedure Execute; virtual; abstract;
   end;
 
+  TJobClass = class of TJob;
+
   { TSemaphoreJob }
 
   TSemaphoreJob = class(TJob)
@@ -147,6 +149,7 @@ type
     procedure RemoveMapID(aID : Cardinal);
     procedure Add(AJob: TParallelProc; Semaphore: TSemaphore); overload;
     procedure Add(AJob: TJob); overload;
+    function ClearJobs(JC: TJobClass): integer;
     procedure GenerateJobMap;
     procedure AddID(PID : Cardinal; AJob: TJob);
     procedure Execute;
@@ -519,6 +522,31 @@ begin
     for i := 1 to FThreads do begin
       FPool.Add(TCustomThread.Create(Self));
       Sleep(SLEEP_TIME div FThreads);
+    end;
+  finally
+    FCS.Leave;
+  end;
+end;
+
+function TThreadPool.ClearJobs(JC: TJobClass): integer;
+var j : TJob;
+  i : integer;
+begin
+  Result := 0;;
+  FCS.Enter;
+  try
+    i := 0;
+    while (i < FList.Count) do
+    begin
+      j := TJob(FList[0]);
+      if (not assigned(jc)) or
+         (j is jc) then
+      begin
+        FList.Delete(0);
+        Inc(Result);
+        j.Free;
+      end else
+        inc(i);
     end;
   finally
     FCS.Leave;
