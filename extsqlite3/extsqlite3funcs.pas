@@ -34,6 +34,8 @@ type
 
 implementation
 
+//uses ;
+
 { TBitwiseOrFunction }
 
 constructor TBitwiseOrFunction.Create;

@@ -203,6 +203,7 @@ type
     function Add(const S: string): Integer;
     procedure Delete(Index: Integer);
     procedure DeleteFromTo(Index1, Index2: Integer);
+    procedure SaveToFile(const FN : String);
     function IndexOf(const S: string): Integer;
     procedure AddStrings(S : TStringList);
     procedure BeginUpdate;
@@ -1500,6 +1501,16 @@ begin
     UnLock;
   end;
   DoChange;
+end;
+
+procedure TThreadStringList.SaveToFile(const FN: String);
+begin
+  Lock;
+  try
+    FStringList.SaveToFile(FN);
+  finally
+    UnLock;
+  end;
 end;
 
 function TThreadStringList.IndexOf(const S: string): Integer;

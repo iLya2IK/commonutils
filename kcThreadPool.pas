@@ -280,7 +280,14 @@ end;
 procedure TIDJob.Execute;
 begin
   try
-    FGuestJob.Execute;
+    try
+      FGuestJob.Execute;
+    except
+      on e : Exception do
+      begin
+        //
+      end;
+    end;
   finally
     FPairOwner.Deactivate;  // early call for boosting
   end;

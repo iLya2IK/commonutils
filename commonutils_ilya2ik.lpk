@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CONFIG>
-  <Package Version="4">
+  <Package Version="5">
     <Name Value="commonutils_ilya2ik"/>
     <Author Value="Copyright (c) 2019-2021, Ilya Medvedkov"/>
     <CompilerOptions>
@@ -16,7 +16,7 @@
     <Description Value="Set of Free Pascal units, used in several projects"/>
     <License Value="LGPL v2"/>
     <Version Major="1" Release="12" Build="1"/>
-    <Files Count="22">
+    <Files Count="24">
       <Item1>
         <Filename Value="bufferedstream.pas"/>
         <UnitName Value="BufferedStream"/>
@@ -103,9 +103,18 @@
       </Item21>
       <Item22>
         <Filename Value="extsqlite3/extsqlitesyncheck.pas"/>
-        <UnitName Value="extsqlitesyncheck"/>
+        <UnitName Value="ExtSqliteSynCheck"/>
       </Item22>
+      <Item23>
+        <Filename Value="oglsha2.pas"/>
+        <UnitName Value="OGLSHA2"/>
+      </Item23>
+      <Item24>
+        <Filename Value="oglgostcrypt.pas"/>
+        <UnitName Value="oglgostcrypt"/>
+      </Item24>
     </Files>
+    <CompatibilityMode Value="True"/>
     <RequiredPkgs Count="1">
       <Item1>
         <PackageName Value="LCLBase"/>

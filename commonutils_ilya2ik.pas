@@ -12,7 +12,8 @@ uses
   kcThreadPool, OGLFastList, OGLFastNumList, OGLFastVariantHash, OGLB64Utils, 
   SortedThreadPool, OGLRegExprWrapper, ExprComparator, ExtSqlite3Backup, 
   ExtSqlite3DS, extsqlite3funcs, sqlitelogger, sqlitewebsession, 
-  ExprSqlite3Funcs, ExtSqliteUtils, ExtSqliteTokens, ExtSqliteSynCheck;
+  ExprSqlite3Funcs, ExtSqliteUtils, ExtSqliteTokens, ExtSqliteSynCheck, 
+  OGLSHA2, OGLGOSTCrypt;
 
 implementation
 

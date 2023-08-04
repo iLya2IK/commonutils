@@ -219,6 +219,14 @@ type
     function ExecToValue(const Params : Array of Const; aValues : PSqliteVariantArray) : TSqliteExecuteResult;
     function ExecToValue(const Params : Array of Const; aValues : TStream; withHeaders : Boolean) : TSqliteExecuteResult;
     function ExecToValue(const Params : Array of Const; aValues : Pointer; aSize : PtrInt) : TSqliteExecuteResult;
+
+    function BindNull(p : integer) : Boolean;
+    function BindInt32(p : integer; value : Int32) : Boolean;
+    function BindInt64(p : integer; value : Int64) : Boolean;
+    function BindDouble(p : integer; value : Double) : Boolean;
+    function BindPChar(p : integer; value : PChar) : Boolean;
+    function BindString(p : integer; const value : String) : Boolean;
+
     procedure Disconnect;
     {$ifdef extra_prepared_thread_safe}
     procedure Lock; inline;
@@ -288,6 +296,14 @@ type
     function ExecToValue(aValues : TStream; withHeaders : Boolean) : TSqliteExecuteResult; overload;
     function ExecToValue(aValues : Pointer; aSize : PtrInt) : TSqliteExecuteResult; overload;
     function ExecToValue(var aValues) : TSqliteExecuteResult; overload;
+
+    function BindNull(p : integer) : Boolean;
+    function BindInt32(p : integer; value : Int32) : Boolean;
+    function BindInt64(p : integer; value : Int64) : Boolean;
+    function BindDouble(p : integer; value : Double) : Boolean;
+    function BindPChar(p : integer; value : PChar) : Boolean;
+    function BindString(p : integer; const value : String) : Boolean;
+
     procedure Disconnect; virtual;
     {$ifdef extra_prepared_thread_safe}
     procedure Lock; inline;
@@ -727,6 +743,90 @@ begin
   Result := ExecToValue([], @aValues, Sizeof(aValues));
 end;
 
+function TSqlite3Prepared.BindNull(p: integer): Boolean;
+begin
+  {$ifdef extra_prepared_thread_safe}
+  Lock;
+  try
+  {$endif}
+  Result := GetThreadHolder.BindNull(p);
+  {$ifdef extra_prepared_thread_safe}
+  finally
+  UnLock;
+  end;
+  {$endif}
+end;
+
+function TSqlite3Prepared.BindInt32(p: integer; value: Int32) : Boolean;
+begin
+  {$ifdef extra_prepared_thread_safe}
+  Lock;
+  try
+  {$endif}
+  Result := GetThreadHolder.BindInt32(p, value);
+  {$ifdef extra_prepared_thread_safe}
+  finally
+  UnLock;
+  end;
+  {$endif}
+end;
+
+function TSqlite3Prepared.BindInt64(p: integer; value: Int64) : Boolean;
+begin
+  {$ifdef extra_prepared_thread_safe}
+  Lock;
+  try
+  {$endif}
+  Result := GetThreadHolder.BindInt64(p, value);
+  {$ifdef extra_prepared_thread_safe}
+  finally
+  UnLock;
+  end;
+  {$endif}
+end;
+
+function TSqlite3Prepared.BindDouble(p: integer; value: Double) : Boolean;
+begin
+  {$ifdef extra_prepared_thread_safe}
+  Lock;
+  try
+  {$endif}
+  Result := GetThreadHolder.BindDouble(p, value);
+  {$ifdef extra_prepared_thread_safe}
+  finally
+  UnLock;
+  end;
+  {$endif}
+end;
+
+function TSqlite3Prepared.BindPChar(p: integer; value: PChar) : Boolean;
+begin
+  {$ifdef extra_prepared_thread_safe}
+  Lock;
+  try
+  {$endif}
+  Result := GetThreadHolder.BindPChar(p, value);
+  {$ifdef extra_prepared_thread_safe}
+  finally
+  UnLock;
+  end;
+  {$endif}
+end;
+
+function TSqlite3Prepared.BindString(p: integer; const value: String) : Boolean;
+begin
+  {$ifdef extra_prepared_thread_safe}
+  Lock;
+  try
+  {$endif}
+  Result := GetThreadHolder.BindString(p, value);
+  {$ifdef extra_prepared_thread_safe}
+  finally
+  UnLock;
+  end;
+  {$endif}
+end;
+
 procedure TSqlite3Prepared.Disconnect;
 {$ifdef prepared_multi_holders}
 var it : Integer;
@@ -1007,6 +1107,75 @@ begin
   finally
     aCons.Free;
   end;
+end;
+
+function TSqlite3PreparedHolder.BindNull(p: integer): Boolean;
+begin
+  FReturnCode := sqlite3_bind_null(vm, p);
+  if FReturnCode <> SQLITE_OK then
+  begin
+    DatabaseError(ReturnString, FOwner.FOwner);
+    Exit(false);
+  end;
+  Result := True;
+end;
+
+function TSqlite3PreparedHolder.BindInt32(p: integer; value: Int32) : Boolean;
+begin
+  FReturnCode := sqlite3_bind_int(vm, p, value);
+  if FReturnCode <> SQLITE_OK then
+  begin
+    DatabaseError(ReturnString, FOwner.FOwner);
+    Exit(false);
+  end;
+  Result := True;
+end;
+
+function TSqlite3PreparedHolder.BindInt64(p: integer; value: Int64) : Boolean;
+begin
+  FReturnCode := sqlite3_bind_int64(vm, p, value);
+  if FReturnCode <> SQLITE_OK then
+  begin
+    DatabaseError(ReturnString, FOwner.FOwner);
+    Exit(false);
+  end;
+  Result := True;
+end;
+
+function TSqlite3PreparedHolder.BindDouble(p: integer; value: Double) : Boolean;
+begin
+  FReturnCode := sqlite3_bind_double(vm, p, value);
+  if FReturnCode <> SQLITE_OK then
+  begin
+    DatabaseError(ReturnString, FOwner.FOwner);
+    Exit(false);
+  end;
+  Result := True;
+end;
+
+function TSqlite3PreparedHolder.BindPChar(p: integer; value: PChar) : Boolean;
+var
+  s : string;
+begin
+  s := StrPas(value);
+  FReturnCode := sqlite3_bind_text(vm, p, pcharstr(s), length(s), @freebindstring);
+  if FReturnCode <> SQLITE_OK then
+  begin
+    DatabaseError(ReturnString, FOwner.FOwner);
+    Exit(false);
+  end;
+  Result := True;
+end;
+
+function TSqlite3PreparedHolder.BindString(p: integer; const value: String) : Boolean;
+begin
+  FReturnCode := sqlite3_bind_text(vm, p, pcharstr(value), length(value), @freebindstring);
+  if FReturnCode <> SQLITE_OK then
+  begin
+    DatabaseError(ReturnString, FOwner.FOwner);
+    Exit(false);
+  end;
+  Result := True;
 end;
 
 procedure TSqlite3PreparedHolder.Disconnect;
