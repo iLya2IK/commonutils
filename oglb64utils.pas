@@ -1,6 +1,11 @@
 { OGLB64Utils
    Base64 conversions
-   Copyright (c) 2021 Ilya Medvedkov   }
+   Copyright (c) 2021-2023 Ilya Medvedkov
+
+   Changes:
+     08.2023 - RFC2045, RFC3501, RFC4648 base64 implementations added
+     08.2023 - StrToB64/B64ToStr encoder/decoder added
+   }
 
 unit OGLB64Utils;
 

@@ -1,3 +1,11 @@
+{ OGLSHA2
+   sha1 compatible interfaces for sha256 and sha512
+
+   Uses a binary compatible implementation of SHA256 and SHA512 from
+   files: DCPsha256.pas
+          DCPsha512.pas
+   Copyright (c) 1999-2002 David Barton }
+
 unit OGLSHA2;
 
 {$mode objfpc}{$H+}
@@ -11,24 +19,17 @@ type
   TSHA512Digest = array[0..63] of Byte;
 
   TSHA256Context = record
-    State: array[0..7] of DWord;
+    State : array[0..7]  of DWord;
     Buffer: array[0..63] of Byte;
     LenHi, LenLo : LongWord;
     Index : DWord;
   end;
 
   TSHA512Context = record
-    State : array[0..7] of QWord;
+    State : array[0..7]  of QWord;
     Buffer: array[0..127] of Byte;
     LenHi, LenLo : QWord;
     Index : DWord;
-  end;
-
-  TGOST94Context = record
-    len : Int64;
-    cipher_ctx : TGOST89Context;
-    left : integer;
-    H, S, remainder : Array [0..31] of byte;
   end;
 
 { core }
@@ -38,17 +39,12 @@ procedure SHA256Final(var ctx: TSHA256Context; out Digest: TSHA256Digest);
 procedure SHA512Init(out ctx: TSHA512Context);
 procedure SHA512Update(var ctx: TSHA512Context; const Buf; BufLen: PtrUInt);
 procedure SHA512Final(var ctx: TSHA512Context; out Digest: TSHA512Digest);
-procedure GOST94Init(out ctx: TGOST94Context);
-procedure GOST94Update(var ctx: TGOST94Context; const Buf; BufLen: PtrUInt);
-procedure GOST94Final(var ctx: TGOST94Context; out Digest: TSHA256Digest);
 
 { auxiliary }
 function SHA256String(const S: String): TSHA256Digest;
 function SHA256Buffer(const Buf; BufLen: PtrUInt): TSHA256Digest;
 function SHA512String(const S: String): TSHA512Digest;
 function SHA512Buffer(const Buf; BufLen: PtrUInt): TSHA512Digest;
-function GOST94String(const S: String): TSHA256Digest;
-function GOST94Buffer(const Buf; BufLen: PtrUInt): TSHA256Digest;
 
 { helpers }
 function SHA256Print(const Digest: TSHA256Digest): String;
@@ -527,32 +523,6 @@ begin
 {$pop}
 end;
 {$endif}
-
-procedure GOST94Init(out ctx: TGOST94Context);
-begin
-
-end;
-
-procedure GOST94Update(var ctx: TGOST94Context; const Buf; BufLen: PtrUInt);
-begin
-
-end;
-
-procedure GOST94Final(var ctx: TGOST94Context; out Digest: TSHA256Digest);
-begin
-
-end;
-
-function GOST94String(const S: String): TSHA256Digest;
-begin
-
-end;
-
-function GOST94Buffer(const Buf; BufLen: PtrUInt): TSHA256Digest;
-begin
-
-end;
-
 
 end.
 

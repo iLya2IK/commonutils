@@ -13,7 +13,7 @@ uses
   SortedThreadPool, OGLRegExprWrapper, ExprComparator, ExtSqlite3Backup, 
   ExtSqlite3DS, extsqlite3funcs, sqlitelogger, sqlitewebsession, 
   ExprSqlite3Funcs, ExtSqliteUtils, ExtSqliteTokens, ExtSqliteSynCheck, 
-  OGLSHA2, OGLGOSTCrypt;
+  OGLSHA2, OGLGOSTCrypt, OGLGOSTHash;
 
 implementation
 
