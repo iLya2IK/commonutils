@@ -122,7 +122,7 @@ type
 
   generic TThreadGetSetValue<T> = class(specialize TThreadGetValue<T>)
   private
-    procedure SetValue(const AValue: T);
+    procedure SetValue(const AValue: T); virtual;
   public
     property Value : T read GetValue write SetValue;
   end;
@@ -131,10 +131,33 @@ type
 
   generic TThreadNumeric<T> = class(specialize TThreadGetSetValue<T>)
   public
-    procedure IncValue; overload;
-    procedure DecValue; overload;
-    procedure IncValue(IncSz : T); overload;
-    procedure DecValue(DecSz: T); overload;
+    procedure IncValue; virtual; overload;
+    procedure DecValue; virtual; overload;
+    procedure IncValue(IncSz : T); virtual; overload;
+    procedure DecValue(DecSz: T); virtual; overload;
+    procedure OrValue(mask : T); virtual;
+    procedure AndValue(mask : T); virtual;
+    procedure XorValue(mask : T); virtual;
+    procedure NotValue; virtual;
+  end;
+
+  { TThreadActiveNumeric }
+
+  generic TThreadActiveNumeric<T> = class(specialize TThreadNumeric<T>)
+  private
+    FOnChange : TNotifyEvent;
+    procedure DoOnChange;
+    procedure SetValue(const AValue: T); override;
+  public
+    procedure IncValue; override; overload;
+    procedure DecValue; override; overload;
+    procedure IncValue(IncSz : T); override; overload;
+    procedure DecValue(DecSz: T); override; overload;
+    procedure OrValue(mask : T); override;
+    procedure AndValue(mask : T); override;
+    procedure XorValue(mask : T); override;
+    procedure NotValue; override;
+    property OnChange : TNotifyEvent read FOnChange write FOnChange;
   end;
 
   TThreadByte = class(specialize TThreadNumeric<Byte>);
@@ -143,6 +166,13 @@ type
   TThreadCardinal = class(specialize TThreadNumeric<Cardinal>);
   TThreadQWord = class(specialize TThreadNumeric<QWord>);
   TThreadInt64 = class(specialize TThreadNumeric<Int64>);
+
+  TThreadActiveByte = class(specialize TThreadActiveNumeric<Byte>);
+  TThreadActiveWord = class(specialize TThreadActiveNumeric<Word>);
+  TThreadActiveInteger = class(specialize TThreadActiveNumeric<Integer>);
+  TThreadActiveCardinal = class(specialize TThreadActiveNumeric<Cardinal>);
+  TThreadActiveQWord = class(specialize TThreadActiveNumeric<QWord>);
+  TThreadActiveInt64 = class(specialize TThreadActiveNumeric<Int64>);
 
   TThreadUtf8String = class(specialize TThreadGetSetValue<UTF8String>);
   TThreadWideString = class(specialize TThreadGetSetValue<WideString>);
@@ -317,6 +347,51 @@ type
 
   TThreadSafeFastSeq = class(specialize TThreadSafeFastBaseSeq<TObject>);
 
+  { TThreadActiveFastBaseCollection }
+
+  generic TThreadActiveFastBaseCollection<T> = class(specialize TThreadSafeFastBaseCollection<T>)
+  private
+    FOnChange : TNotifyEvent;
+    FUpdateCnt : integer;
+    procedure DoChange;
+    function GetOnChange: TNotifyEvent;
+    procedure SetOnChange(AValue: TNotifyEvent);
+  protected
+    procedure SetCount(AValue: integer); override;
+  public
+    constructor Create;
+    procedure BeginUpdate;
+    procedure EndUpdate;
+    function Add(const Obj : T) : Integer; override;
+    function Remove(const obj: T) : integer; override;
+    procedure Delete(Ind : integer); override;
+    procedure Clear; override;
+    procedure Extract(Ind : integer); override;
+    procedure Pack; override;
+    property OnChange : TNotifyEvent read GetOnChange write SetOnChange;
+  end;
+
+  { TThreadActiveFastBaseSeq }
+
+  generic TThreadActiveFastBaseSeq<T> = class(specialize TThreadSafeFastBaseSeq<T>)
+  private
+    FOnChange : TNotifyEvent;
+    FUpdateCnt : integer;
+    procedure DoChange;
+    function GetOnChange: TNotifyEvent;
+    procedure SetOnChange(AValue: TNotifyEvent);
+  public
+    constructor Create;
+    procedure BeginUpdate;
+    procedure EndUpdate;
+    procedure Push_back(const O : TObject); override;
+    procedure Push_front(const O : TObject); override;
+    function InsertBefore(loc: TIteratorObject; o: TObject): TIteratorObject; override;
+    function InsertAfter(loc: TIteratorObject; o: TObject): TIteratorObject; override;
+
+    property OnChange : TNotifyEvent read GetOnChange write SetOnChange;
+  end;
+
   { TNetReferenceList }
 
   TNetReferenceList = class(TThreadSafeFastSeq)
@@ -350,6 +425,234 @@ type
   end;
 
 implementation
+
+{ TThreadActiveFastBaseCollection }
+
+procedure TThreadActiveFastBaseCollection.DoChange;
+begin
+  if FUpdateCnt = 0 then
+   if assigned(FOnChange) then
+     FOnChange(Self);
+end;
+
+function TThreadActiveFastBaseCollection.GetOnChange: TNotifyEvent;
+begin
+  Lock;
+  try
+    Result := FOnChange;
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TThreadActiveFastBaseCollection.SetOnChange(AValue: TNotifyEvent);
+begin
+  Lock;
+  try
+    FOnChange := AValue;
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TThreadActiveFastBaseCollection.SetCount(AValue: integer);
+begin
+  inherited SetCount(AValue);
+  DoChange;
+end;
+
+constructor TThreadActiveFastBaseCollection.Create;
+begin
+  inherited Create;
+  FOnChange:= nil;
+  FUpdateCnt:= 0;
+end;
+
+procedure TThreadActiveFastBaseCollection.BeginUpdate;
+begin
+  Lock;
+  Inc(FUpdateCnt);
+end;
+
+procedure TThreadActiveFastBaseCollection.EndUpdate;
+begin
+  Dec(FUpdateCnt);
+  UnLock;
+  DoChange;
+end;
+
+function TThreadActiveFastBaseCollection.Add(const Obj: T): Integer;
+begin
+  Result:=inherited Add(Obj);
+  DoChange;
+end;
+
+function TThreadActiveFastBaseCollection.Remove(const obj: T): integer;
+begin
+  Result:=inherited Remove(obj);
+  DoChange;
+end;
+
+procedure TThreadActiveFastBaseCollection.Delete(Ind: integer);
+begin
+  inherited Delete(Ind);
+  DoChange;
+end;
+
+procedure TThreadActiveFastBaseCollection.Clear;
+begin
+  inherited Clear;
+  DoChange;
+end;
+
+procedure TThreadActiveFastBaseCollection.Extract(Ind: integer);
+begin
+  inherited Extract(Ind);
+  DoChange;
+end;
+
+procedure TThreadActiveFastBaseCollection.Pack;
+begin
+  inherited Pack;
+  DoChange;
+end;
+
+{ TThreadActiveFastBaseSeq }
+
+procedure TThreadActiveFastBaseSeq.DoChange;
+begin
+  if FUpdateCnt = 0 then
+   if assigned(FOnChange) then
+     FOnChange(Self);
+end;
+
+function TThreadActiveFastBaseSeq.GetOnChange: TNotifyEvent;
+begin
+  Lock;
+  try
+    Result := FOnChange;
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TThreadActiveFastBaseSeq.SetOnChange(AValue: TNotifyEvent);
+begin
+  Lock;
+  try
+    FOnChange := AValue;
+  finally
+    UnLock;
+  end;
+end;
+
+constructor TThreadActiveFastBaseSeq.Create;
+begin
+  inherited Create;
+  FOnChange:= nil;
+  FUpdateCnt:= 0;
+end;
+
+procedure TThreadActiveFastBaseSeq.BeginUpdate;
+begin
+  Lock;
+  Inc(FUpdateCnt);
+end;
+
+procedure TThreadActiveFastBaseSeq.EndUpdate;
+begin
+  Dec(FUpdateCnt);
+  UnLock;
+  DoChange;
+end;
+
+procedure TThreadActiveFastBaseSeq.Push_back(const O: TObject);
+begin
+  inherited Push_back(O);
+  DoChange;
+end;
+
+procedure TThreadActiveFastBaseSeq.Push_front(const O: TObject);
+begin
+  inherited Push_front(O);
+  DoChange;
+end;
+
+function TThreadActiveFastBaseSeq.InsertBefore(loc: TIteratorObject; o: TObject
+  ): TIteratorObject;
+begin
+  Result:=inherited InsertBefore(loc, o);
+  DoChange;
+end;
+
+function TThreadActiveFastBaseSeq.InsertAfter(loc: TIteratorObject; o: TObject
+  ): TIteratorObject;
+begin
+  Result:=inherited InsertAfter(loc, o);
+  DoChange;
+end;
+
+{ TThreadActiveNumeric }
+
+procedure TThreadActiveNumeric.DoOnChange;
+begin
+  if Assigned(FOnChange) then
+    FOnChange(Self);
+end;
+
+procedure TThreadActiveNumeric.SetValue(const AValue: T);
+begin
+  inherited SetValue(AValue);
+  DoOnChange;
+end;
+
+procedure TThreadActiveNumeric.IncValue;
+begin
+  inherited IncValue;
+  DoOnChange;
+end;
+
+procedure TThreadActiveNumeric.DecValue;
+begin
+  inherited DecValue;
+  DoOnChange;
+end;
+
+procedure TThreadActiveNumeric.IncValue(IncSz: T);
+begin
+  inherited IncValue(IncSz);
+  DoOnChange;
+end;
+
+procedure TThreadActiveNumeric.DecValue(DecSz: T);
+begin
+  inherited DecValue(DecSz);
+  DoOnChange;
+end;
+
+procedure TThreadActiveNumeric.OrValue(mask: T);
+begin
+  inherited OrValue(mask);
+  DoOnChange;
+end;
+
+procedure TThreadActiveNumeric.AndValue(mask: T);
+begin
+  inherited AndValue(mask);
+  DoOnChange;
+end;
+
+procedure TThreadActiveNumeric.XorValue(mask: T);
+begin
+  inherited XorValue(mask);
+  DoOnChange;
+end;
+
+procedure TThreadActiveNumeric.NotValue;
+begin
+  inherited NotValue;
+  DoOnChange;
+end;
 
 { TThreadGetSetValue }
 
@@ -418,6 +721,46 @@ begin
   Lock;
   try
     Dec(FValue, DecSz);
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TThreadNumeric.OrValue(mask: T);
+begin
+  Lock;
+  try
+    FValue := FValue or mask;
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TThreadNumeric.AndValue(mask: T);
+begin
+  Lock;
+  try
+    FValue := FValue and mask;
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TThreadNumeric.XorValue(mask: T);
+begin
+  Lock;
+  try
+    FValue := FValue xor mask;
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TThreadNumeric.NotValue();
+begin
+  Lock;
+  try
+    FValue := not  FValue;
   finally
     UnLock;
   end;
