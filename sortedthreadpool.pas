@@ -39,7 +39,7 @@ type
     procedure RestartJob(aHoldDelay : Cardinal; const aHoldStart : QWord);
     property NeedToRestart : Boolean read FNeedToRestart write FNeedToRestart;
     property HoldOnValueMs : Cardinal read FHoldOnValueMs write FHoldOnValueMs;
-    function IsReady(const TS: QWord): Boolean;
+    function IsReady(const TS: QWord): Cardinal;
     procedure Execute; virtual; abstract;
   end;
 
@@ -90,6 +90,47 @@ type
     property Value : TJobToJobWait read GetValue write SetValue;
   end;
 
+  TOnRefreshJob = procedure (j : TLinearJob; const delta : Cardinal) of object;
+  TOnRebornJob = procedure (j : TLinearJob) of object;
+
+  { TWaitingCollection }
+
+  TWaitingCollection = class(specialize TFastBaseCollection<TLinearJob>)
+  private
+    FDelta : Cardinal;
+  public
+    constructor Create(dt : Cardinal);
+
+    procedure AddJob(j : TLinearJob);
+    procedure DeleteJob(i : integer);
+
+    procedure Refresh(const TS: QWord; cb : TOnRefreshJob);
+  end;
+
+  { TWaitingPool }
+
+  TWaitingPool = class
+  private
+    F1msPool : TWaitingCollection;
+    F10msPool : TWaitingCollection;
+    F100msPool : TWaitingCollection;
+    F1000msPool : TWaitingCollection;
+    FOnRebornJob: TOnRebornJob;
+
+    FTS1ms, FTS10ms, FTS100ms, FTS1000ms : QWord;
+
+    procedure DoOnRefreshJob(j : TLinearJob; const delta : Cardinal);
+  public
+    constructor Create;
+    destructor Destroy; override;
+
+    procedure AddJob(j : TLinearJob; timeout : Cardinal);
+
+    procedure Refresh(const TS: QWord);
+
+    property OnRebornJob : TOnRebornJob read FOnRebornJob write FOnRebornJob;
+  end;
+
   { TSortedCustomThread }
 
   TSortedCustomThread = class(TThread)
@@ -99,8 +140,8 @@ type
     FJob : TLinearJob;
     FThreadKind : TThreadPoolThreadKind;
     FSleepTime : TThreadJobToJobWait;
-    FWaitedJobs : TFastCollection;
-    function ProceedWaitingJobs(const TS: QWord) : TLinearJob;
+    FWaitedJobs : TWaitingPool;
+    procedure DoOnRebornJob(j : TLinearJob);
     procedure SendForWaiting(j: TLinearJob);
     function GetRunning: Boolean;
     function GetSleepTime: TJobToJobWait;
@@ -179,16 +220,151 @@ const DefaultJobToJobWait : TJobToJobWait = (DefaultValue : SORTED_DEFAULT_SLEEP
 
 implementation
 
+{ TWaitingPool }
+
+procedure TWaitingPool.DoOnRefreshJob(j: TLinearJob; const delta: Cardinal);
+var
+  target : TWaitingCollection;
+begin
+  case delta of
+   0 : target := nil;
+   1..9 : target := F1msPool;
+   10..99 : target := F10msPool;
+   100..999 : target := F100msPool;
+  else
+   target := F1000msPool;
+  end;
+
+  if assigned(target) then
+    target.AddJob(j)
+  else
+  begin
+    if Assigned(FOnRebornJob) then
+      FOnRebornJob(j);
+  end;
+end;
+
+constructor TWaitingPool.Create;
+begin
+  F1msPool := TWaitingCollection.Create(1);
+  F10msPool := TWaitingCollection.Create(10);
+  F100msPool := TWaitingCollection.Create(100);
+  F1000msPool := TWaitingCollection.Create(1000);
+
+  FTS1ms := GetTickCount64;
+  FTS10ms := GetTickCount64;
+  FTS100ms := GetTickCount64;
+  FTS1000ms := GetTickCount64;
+end;
+
+destructor TWaitingPool.Destroy;
+begin
+  F1msPool.Free;
+  F10msPool.Free;
+  F100msPool.Free;
+  F1000msPool.Free;
+
+  inherited Destroy;
+end;
+
+procedure TWaitingPool.AddJob(j: TLinearJob; timeout: Cardinal);
+begin
+  DoOnRefreshJob(j, timeout);
+end;
+
+procedure TWaitingPool.Refresh(const TS: QWord);
+var
+  Delta : Int32;
+begin
+  Delta := Int32(Int64(1) + Int64(FTS1ms) - Int64(TS));
+  if (Delta <= 0) then
+  begin
+    F1msPool.Refresh(TS, @DoOnRefreshJob);
+    FTS1ms := TS;
+  end;
+  Delta := Int32(Int64(10) + Int64(FTS10ms) - Int64(TS));
+  if (Delta <= 0) then
+  begin
+    F10msPool.Refresh(TS, @DoOnRefreshJob);
+    FTS10ms := TS;
+  end;
+  Delta := Int32(Int64(100) + Int64(FTS100ms) - Int64(TS));
+  if (Delta <= 0) then
+  begin
+    F100msPool.Refresh(TS, @DoOnRefreshJob);
+    FTS100ms := TS;
+  end;
+  Delta := Int32(Int64(1000) + Int64(FTS1000ms) - Int64(TS));
+  if (Delta <= 0) then
+  begin
+    F1000msPool.Refresh(TS, @DoOnRefreshJob);
+    FTS1000ms := TS;
+  end;
+end;
+
+{ TWaitingCollection }
+
+constructor TWaitingCollection.Create(dt: Cardinal);
+begin
+  inherited Create;
+  FDelta := dt;
+end;
+
+procedure TWaitingCollection.AddJob(j: TLinearJob);
+var
+  i : integer;
+begin
+  i := IndexOf(nil);
+  if i < 0 then
+    Add(j)
+  else
+    Item[i] := j;
+end;
+
+procedure TWaitingCollection.DeleteJob(i: integer);
+begin
+  Item[i] := nil;
+end;
+
+procedure TWaitingCollection.Refresh(const TS: QWord; cb : TOnRefreshJob);
+var
+  i : integer;
+  nd : Cardinal;
+  j : TLinearJob;
+begin
+  for i := 0 to Count-1 do
+  begin
+    j := Item[i];
+    if Assigned(j) then
+    begin
+      nd := Item[i].IsReady(TS);
+      if (nd div FDelta) = 0 then
+      begin
+        Item[i] := nil;
+        cb(j, nd);
+      end;
+    end;
+  end;
+end;
+
 { TLinearJob }
 
-function TLinearJob.IsReady(const TS: QWord): Boolean;
+function TLinearJob.IsReady(const TS: QWord): Cardinal;
+var
+  Delta : Int32;
 begin
   if FHoldOnValueMs > 0 then
   begin
-    Result := (Int64(TS) - Int64(FHoldStart)) > Int64(FHoldOnValueMs);
-    if Result then
+    Delta := Int32(Int64(FHoldOnValueMs) + Int64(FHoldStart) - Int64(TS));
+
+    if Delta < 0 then
+    begin
+      Result := 0;
       FHoldOnValueMs := 0;
-  end else Result := true;
+    end else
+      Result := Cardinal(Delta);
+
+  end else Result := 0;
 end;
 
 constructor TLinearJob.Create;
@@ -332,7 +508,7 @@ begin
     begin
       JN := FSortedList.FindLowest;
       Result := TSortedJob(JN.Data);
-      while assigned(Result) and (not Result.IsReady(TS)) do
+      while assigned(Result) and (Result.IsReady(TS) > 0) do
       begin
         JN := JN.Successor;
         if assigned(JN) then
@@ -350,8 +526,7 @@ end;
 function TSortedThreadPool.GetLinearJob(const TS : QWord) : TLinearJob;
 begin
   Result := TLinearJob(FLinearList.PopValue);
-  if assigned(Result) then
-  if not Result.IsReady(TS) then
+  if assigned(Result) and (Result.IsReady(TS) > 0) then
   begin
     FLinearList.Push_back(Result);
     Result := nil;
@@ -653,43 +828,20 @@ end;
 
 { TSortedCustomThread }
 
-function TSortedCustomThread.ProceedWaitingJobs(const TS : QWord) : TLinearJob;
-var i : integer;
-    j : TLinearJob;
+procedure TSortedCustomThread.DoOnRebornJob(j: TLinearJob);
 begin
-  Result := nil;
-  for i := 0 to FWaitedJobs.Count-1 do
+  j.NeedToRestart := false;
+  if j is TSortedJob then
   begin
-    j := TLinearJob(FWaitedJobs[i]);
-    if assigned(j) then
-    begin
-      if j.IsReady(TS) then
-      begin
-        j.FNeedToRestart := false;
-        if not assigned(Result) then
-          Result := j
-        else
-        begin
-          if j is TSortedJob then
-          begin
-            TSortedJob(j).UpdateScore;
-            FOwner.AddSorted(TSortedJob(j));
-          end else
-            FOwner.AddLinear(j);
-        end;
-        FWaitedJobs[i] := nil;
-      end;
-    end;
-  end;
+    TSortedJob(j).UpdateScore;
+    FOwner.AddSorted(TSortedJob(j));
+  end else
+    FOwner.AddLinear(j);
 end;
 
 procedure TSortedCustomThread.SendForWaiting(j: TLinearJob);
-var i : integer;
 begin
-  i := FWaitedJobs.IndexOf(nil);
-  if i >= 0 then
-    FWaitedJobs[i] := j else
-    FWaitedJobs.Add(j);
+  FWaitedJobs.AddJob(j, j.HoldOnValueMs);
 end;
 
 function TSortedCustomThread.GetRunning: Boolean;
@@ -738,7 +890,9 @@ begin
       if not Assigned(j) then
       begin
         if (s = k) then
-          j := ProceedWaitingJobs(TS)
+        begin
+          FWaitedJobs.Refresh(TS);
+        end
         else
         begin
           case ThreadKind of
@@ -781,7 +935,8 @@ end;
 constructor TSortedCustomThread.Create(AOwner: TSortedThreadPool;
   AKind: TPoolThreadKind; aSleepTime: TJobToJobWait);
 begin
-  FWaitedJobs := TFastCollection.Create;
+  FWaitedJobs := TWaitingPool.Create;
+  FWaitedJobs.OnRebornJob := @DoOnRebornJob;
   FOwner := AOwner;
   FRunning := TThreadBoolean.Create(False);
   FSleepTime:= TThreadJobToJobWait.Create(aSleepTime);

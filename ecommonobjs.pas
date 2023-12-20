@@ -139,6 +139,10 @@ type
     procedure AndValue(mask : T); virtual;
     procedure XorValue(mask : T); virtual;
     procedure NotValue; virtual;
+
+    function BitwiseOr(mask : T) : T;
+    function BitwiseAnd(mask : T) : T;
+    function BitwiseXor(mask : T) : T;
   end;
 
   { TThreadActiveNumeric }
@@ -761,6 +765,36 @@ begin
   Lock;
   try
     FValue := not  FValue;
+  finally
+    UnLock;
+  end;
+end;
+
+function TThreadNumeric.BitwiseOr(mask: T): T;
+begin
+  Lock;
+  try
+    Result := FValue or mask;
+  finally
+    UnLock;
+  end;
+end;
+
+function TThreadNumeric.BitwiseAnd(mask: T): T;
+begin
+  Lock;
+  try
+    Result := FValue and mask;
+  finally
+    UnLock;
+  end;
+end;
+
+function TThreadNumeric.BitwiseXor(mask: T): T;
+begin
+  Lock;
+  try
+    Result := FValue xor mask;
   finally
     UnLock;
   end;
