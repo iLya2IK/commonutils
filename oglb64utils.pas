@@ -245,15 +245,6 @@ begin
    result := b64EncodeTable[enc, value and 63] + result;
    value := value shr 6;
  end;
- for i := 0 to digits - 1 do
-  begin
-   result[digits - i] := b64EncodeTable[enc, value and 63];
-   value := value shr 6;
-  end ;
- while value <> 0 do begin
-   result := b64EncodeTable[enc, value and 63] + result;
-   value := value shr 6;
- end;
 end;
 
 function DecodeB64ToStrExt(enc: b64Encoder; const value: RawByteString
