@@ -226,7 +226,7 @@ procedure TWaitingPool.DoOnRefreshJob(j: TLinearJob; const delta: Cardinal);
 var
   target : TWaitingCollection;
 begin
-  case delta of
+  case (delta div 4) of
    0 : target := nil;
    1..9 : target := F1msPool;
    10..99 : target := F10msPool;

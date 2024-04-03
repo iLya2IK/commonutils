@@ -281,6 +281,19 @@ type
     procedure AddKeySorted(const aKey : TKey; const aValue : WideString); override;
   end;
 
+  { TFastMapDouble }
+
+  TFastMapDouble = class(specialize TFastKeyValuePairList<Double>)
+  protected
+    procedure DisposeValue(Index : Integer); override;
+    function DoGetValue(aIndex : Integer) : Double; override;
+    procedure DoSetValue(aIndex : Integer; const AValue : Double); override;
+    class function NullValue : Double; override;
+  public
+    procedure AddKey(const aKey : TKey; const aValue : Double); override;
+    procedure AddKeySorted(const aKey : TKey; const aValue : Double); override;
+  end;
+
 function KeyValuePair(const aKey : TKey; aValue : PtrUInt) : TKeyValuePair; overload;
 function KeyValuePair(const aKey : TKey; aValue : PtrInt) : TKeyValuePair; overload;
 function KeyValuePair(const aKey : TKey; aValue : TObject) : TKeyValuePair; overload;
@@ -336,6 +349,12 @@ begin
   Result := WideStrAlloc(sl + 1);
   if sl > 0 then Move(aValue^, Result^, sl shl 1);
   Result[sl] := #0;
+end;
+
+function AllocPDouble(aValue : Double) : PDouble;
+begin
+  Result := AllocMem(sizeof(Double));
+  Result^ := AValue;
 end;
 
 function KeyValuePair(const aKey: TKey; aValue: PtrUInt): TKeyValuePair;
@@ -396,6 +415,13 @@ begin
   Result.PVar := AllocVariant(aValue);
 end;
 
+function KeyValuePairDouble(const aKey : TKey; const aValue : Double
+  ) : TKeyValuePair;
+begin
+  Result.Key := aKey;
+  Result.PtrValue := AllocPDouble(aValue);
+end;
+
 function DoKeyValueCompare(Item1, Item2: Pointer): Integer;
 {$ifdef CPUX86_64}
 assembler;
@@ -418,6 +444,38 @@ asm
 begin
   Result := Math.CompareValue(PKeyValuePair(Item1)^.Key, PKeyValuePair(Item2)^.Key);
 {$endif}
+end;
+
+{ TFastMapDouble }
+
+procedure TFastMapDouble.DisposeValue(Index: Integer);
+begin
+  FreeMem(PKeyValuePair(FBaseList)[Index].PtrValue);
+end;
+
+function TFastMapDouble.DoGetValue(aIndex: Integer): Double;
+begin
+  Result := PDouble(PKeyValuePair(FBaseList)[aIndex].PtrValue)^;
+end;
+
+procedure TFastMapDouble.DoSetValue(aIndex: Integer; const AValue: Double);
+begin
+  PKeyValuePair(FBaseList)[aIndex].PtrValue := AllocPDouble(AValue);
+end;
+
+class function TFastMapDouble.NullValue: Double;
+begin
+  Result := 0.0; // nan maybe
+end;
+
+procedure TFastMapDouble.AddKey(const aKey: TKey; const aValue: Double);
+begin
+  Add(KeyValuePairDouble(aKey, aValue));
+end;
+
+procedure TFastMapDouble.AddKeySorted(const aKey: TKey; const aValue: Double);
+begin
+  AddSorted(KeyValuePairDouble(aKey, aValue));
 end;
 
 { TFastMapWStr }

@@ -243,6 +243,7 @@ type
     procedure BeginUpdate;
     procedure EndUpdate;
     procedure Clear;
+    procedure ConcatText(const aText : String);
     property Item[index : integer] : String read GetStr write SetStr; default;
     property Count : Integer read GetCount;
     property Text : String read GetText write SetText;
@@ -1938,6 +1939,17 @@ begin
     end;
     DoChange;
   end;
+end;
+
+procedure TThreadStringList.ConcatText(const aText: String);
+begin
+  Lock;
+  try
+    FStringList.Text := FStringList.Text + aText;
+  finally
+    UnLock;
+  end;
+  DoChange;
 end;
 
 end.
