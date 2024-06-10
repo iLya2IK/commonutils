@@ -111,7 +111,9 @@ type
     FRTI : TRTLCriticalSection;
     FIds : TFastCollection;
     FLastLoc : Integer;
+    FJobCount : Integer;
     function GetCount: Integer;
+    function GetJobCount: Integer;
   public
     constructor Create;
     destructor Destroy; override;
@@ -124,6 +126,7 @@ type
     procedure Lock;
     procedure UnLock;
     property Count : Integer read GetCount;
+    property JobCount : Integer read GetJobCount;
   end;
 
   { TThreadPool }
@@ -132,10 +135,13 @@ type
   private
     FPool: TFastList;
     FList: TFastList;
+    FEvent : PRTLEvent;
     FJobMap : TIDJobMap;
     FCS: TCriticalSection;
     FThreadsCount : Integer;
     FRunning: Boolean;
+    procedure Signal;
+    function WaitJobs : Boolean;
     function GetJobAt(index : integer): TJob;
     function GetJobsCount: Integer;
     function GetRunningThreads: Integer;
@@ -311,16 +317,28 @@ begin
   Result := FIds.Count;
 end;
 
+function TIDJobMap.GetJobCount: Integer;
+begin
+  Lock;
+  try
+    Result := FJobCount;
+  finally
+    UnLock;
+  end;
+end;
+
 constructor TIDJobMap.Create;
 begin
   InitCriticalSection(FRTI);
   FIds := TFastCollection.Create;
   FLastLoc := 0;
+  FJobCount := 0;
 end;
 
 destructor TIDJobMap.Destroy;
 begin
   FIds.Free;
+  FJobCount:= 0;
   DoneCriticalsection(FRTI);
   inherited Destroy;
 end;
@@ -410,7 +428,11 @@ begin
     UnLock;
   end;
   if assigned(p) then
+  begin
      result := p.Pop;
+     if assigned(Result) then
+       Dec(FLastLoc);
+  end;
 end;
 
 procedure TIDJobMap.Push(aID: Cardinal; j: TJob);
@@ -423,6 +445,7 @@ begin
     begin
       p := TIDJobPair.Create(aID);
       FIds.Add(p);
+      Inc(FLastLoc);
     end;
     p.Push(j);
   finally
@@ -461,6 +484,21 @@ begin
   finally
     FCS.Leave;
   end;
+  if  (FJobMap.JobCount > 0) or (FList.Count > 0) then
+  begin
+    Signal;
+  end;
+end;
+
+procedure TThreadPool.Signal;
+begin
+  RTLEventSetEvent(FEvent);
+end;
+
+function TThreadPool.WaitJobs: Boolean;
+begin
+  RTLEventWaitFor(FEvent);
+  Result := (FJobMap.JobCount = 0) and (FList.Count = 0);
 end;
 
 function TThreadPool.GetJobAt(index : integer): TJob;
@@ -523,6 +561,7 @@ begin
   FList := TFastList.Create;
   FJobMap := nil;
   FThreadsCount := FThreads;
+  FEvent:= RTLEventCreate;
 
   FCS.Enter;
   try
@@ -558,6 +597,7 @@ begin
   finally
     FCS.Leave;
   end;
+  Signal;
 end;
 
 destructor TThreadPool.Destroy;
@@ -585,6 +625,7 @@ begin
 
   while cnt > 0 do
   begin
+    Signal;
     cnt := 0;
     for i := 0 to FPool.Count - 1 do
     begin
@@ -616,6 +657,8 @@ begin
 
   if assigned(FJobMap) then
      FJobMap.Free;
+
+  RTLEventDestroy(FEvent);
   inherited Destroy;
 end;
 
@@ -735,13 +778,21 @@ procedure TCustomThread.Execute;
 var
   j: TJob;
 begin
-  while not Terminated do
+  while (not Terminated) do
   begin
     if FOwner.Running then
     begin
+      if FOwner.WaitJobs then
+      begin
+        Sleep(SLEEP_TIME);
+        Continue;
+      end;
+
       j := FOwner.GetJob;
       if Assigned(j) then
       begin
+        FOwner.Signal;
+
         FRunning := True;
         try
           myJob := j;
@@ -754,8 +805,8 @@ begin
       end
       else
         FRunning := False;
-    end;
-    Sleep(SLEEP_TIME);
+    end else
+      Sleep(SLEEP_TIME);
   end;
 end;
 
