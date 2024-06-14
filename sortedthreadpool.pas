@@ -99,7 +99,7 @@ type
   private
     FDelta : Cardinal;
     FLocTS : QWord;
-    FLiveCnt : TThreadInteger;
+    FLiveCnt : TAtomicInteger;
     FLocker  : TThreadSafeObject;
     function GetLiveCnt: Integer;
   public
@@ -140,7 +140,7 @@ type
   TSortedCustomThread = class(TThread)
   private
     FOwner: TSortedThreadPool;
-    FRunning: TThreadBoolean;
+    FRunning: TAtomicBoolean;
     FJob : TLinearJob;
     FThreadKind : TThreadPoolThreadKind;
     FSleepTime : TThreadJobToJobWait;
@@ -172,13 +172,13 @@ type
     FSortedList: TAvgLvlTree;
     FSortedListLocker : TNetCustomLockedObject;
     FLinearList : TThreadSafeFastSeq;
-    FSortedThreadsCount : TThreadInteger;
-    FLinearThreadsCount : TThreadInteger;
+    FSortedThreadsCount : TAtomicInteger;
+    FLinearThreadsCount : TAtomicInteger;
     FThreadJobToJobWait : TThreadJobToJobWait;
     FWaitedJobs : TWaitingPool;
     FSortedEvent : PRTLEvent;
     FLinearEvent : PRTLEvent;
-    FRunning: TThreadBoolean;
+    FRunning: TAtomicBoolean;
     procedure DoOnRebornJob(j : TLinearJob);
     procedure LinearJobSignal;
     procedure SortedJobSignal;
@@ -245,7 +245,7 @@ begin
   inherited Create;
   FDelta := dt;
   FLocTS:= GetTickCount64;
-  FLiveCnt := TThreadInteger.Create(0);
+  FLiveCnt := TAtomicInteger.Create(0);
   FLocker:= TThreadSafeObject.Create;
 end;
 
@@ -789,12 +789,12 @@ begin
   FSortedList.OwnsObjects:=false;
   FSortedListLocker := TNetCustomLockedObject.Create;
   FLinearList := TThreadSafeFastSeq.Create;
-  FSortedThreadsCount := TThreadInteger.Create(aSortedThreads);
-  FLinearThreadsCount := TThreadInteger.Create(aLinearThreads);
+  FSortedThreadsCount := TAtomicInteger.Create(aSortedThreads);
+  FLinearThreadsCount := TAtomicInteger.Create(aLinearThreads);
   FThreadJobToJobWait := TThreadJobToJobWait.Create(DefaultJobToJobWait);
   ThreadJobToJobWait := aSleepTime;
   FT := ThreadJobToJobWait;
-  FRunning:= TThreadBoolean.Create(false);
+  FRunning:= TAtomicBoolean.Create(false);
   FThreads := aSortedThreads + aLinearThreads;
 
   FPool.Lock;
@@ -1048,7 +1048,7 @@ constructor TSortedCustomThread.Create(AOwner: TSortedThreadPool;
   AKind: TPoolThreadKind; aSleepTime: TJobToJobWait);
 begin
   FOwner := AOwner;
-  FRunning := TThreadBoolean.Create(False);
+  FRunning := TAtomicBoolean.Create(False);
   FSleepTime:= TThreadJobToJobWait.Create(aSleepTime);
   FThreadKind := TThreadPoolThreadKind.Create(AKind);
   inherited Create(False);

@@ -4,7 +4,7 @@
 
    Part of ESolver project
 
-   Copyright (c) 2019-2021 by Ilya Medvedkov
+   Copyright (c) 2019-2024 by Ilya Medvedkov
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -15,12 +15,84 @@ unit ECommonObjs;
 
 {$mode objfpc}{$H+}
 
+{.$define AtomicAsRW}
+{$define AtomicAsInterlocked}
+{.$define AtomicAsCS}
+{$ifdef AtomicAsRW}
+{$define userwlocks}
+{$else}
+{.$define userwlocks}
+{$endif}
+
 interface
 
 uses
-  Classes, SysUtils, OGLFastList, extmemorystream;
+  Classes, SysUtils, OGLFastList, extmemorystream
+  {$ifdef userwlocks}
+  {$ifdef Windows}
+  ,Windows
+  {$else}
+   {$ifdef Unix}
+    {$ifdef usecthreads}
+     ,cthreads
+    {$endif}
+    ,UnixType,PThreads
+   {$endif}
+  {$endif}
+  {$endif};
 
 type
+
+  { TNetInterlocked }
+
+  TNetInterlocked=class
+  public
+    class function Increment(var Destination:Int32):Int32; overload; static; inline;
+    class function Increment(var Destination:UInt32):UInt32; overload; static; inline;
+    class function Increment(var Destination:Int64):Int64; overload; static; inline;
+    class function Increment(var Destination:UInt64):UInt64; overload; static; inline;
+    class function Decrement(var Destination:Int32):Int32; overload; static; inline;
+    class function Decrement(var Destination:UInt32):UInt32; overload; static; inline;
+    class function Decrement(var Destination:Int64):Int64; overload; static; inline;
+    class function Decrement(var Destination:UInt64):UInt64; overload; static; inline;
+    class function Add(var Destination:Int32;const Value:Int32):Int32; overload; static; inline;
+    class function Add(var Destination:UInt32;const Value:UInt32):UInt32; overload; static; inline;
+    class function Add(var Destination:Int64;const Value:Int64):Int64; overload; static; inline;
+    class function Add(var Destination:UInt64;const Value:UInt64):UInt64; overload; static; inline;
+    class function Sub(var Destination:Int32;const Value:Int32):Int32; overload; static; inline;
+    class function Sub(var Destination:UInt32;const Value:UInt32):UInt32; overload; static; inline;
+    class function Sub(var Destination:Int64;const Value:Int64):Int64; overload; static; inline;
+    class function Sub(var Destination:UInt64;const Value:UInt64):UInt64; overload; static; inline;
+    class function Exchange(var Destination:Int32;const Source:Int32):Int32; overload; static; inline;
+    class function Exchange(var Destination:UInt32;const Source:UInt32):UInt32; overload; static; inline;
+    class function Exchange(var Destination:Int64;const Source:Int64):Int64; overload; static; inline;
+    class function Exchange(var Destination:UInt64;const Source:UInt64):UInt64; overload; static; inline;
+    class function Exchange(var Destination:pointer;const Source:pointer):pointer; overload; static; inline;
+    class function Exchange(var Destination:TObject;const Source:TObject):TObject; overload; static; inline;
+    class function Exchange(var Destination:LongBool;const Source:LongBool):LongBool; overload; static; inline;
+    class function CompareExchange(var Destination:Int32;const NewValue,Comperand:Int32):Int32; overload; static; inline;
+    class function CompareExchange(var Destination:UInt32;const NewValue,Comperand:UInt32):UInt32; overload; static; inline;
+    class function CompareExchange(var Destination:Int64;const NewValue,Comperand:Int64):Int64; overload; static; inline;
+    class function CompareExchange(var Destination:UInt64;const NewValue,Comperand:UInt64):UInt64; overload; static; inline;
+    class function CompareExchange(var Destination:pointer;const NewValue,Comperand:pointer):pointer; overload; static; inline;
+    class function CompareExchange(var Destination:TObject;const NewValue,Comperand:TObject):TObject; overload; static; inline;
+    class function CompareExchange(var Destination:LongBool;const NewValue,Comperand:LongBool):LongBool; overload; static; inline;
+    class function Read(var Source:Int32):Int32; overload; static; inline;
+    class function Read(var Source:UInt32):UInt32; overload; static; inline;
+    class function Read(var Source:Int64):Int64; overload; static; inline;
+    class function Read(var Source:UInt64):UInt64; overload; static; inline;
+    class function Read(var Source:pointer):pointer; overload; static; inline;
+    class function Read(var Source:TObject):TObject; overload; static; inline;
+    class function Read(var Source:LongBool):LongBool; overload; static; inline;
+    class function Write(var Destination:Int32;const Source:Int32):Int32; overload; static; inline;
+    class function Write(var Destination:UInt32;const Source:UInt32):UInt32; overload; static; inline;
+    class function Write(var Destination:Int64;const Source:Int64):Int64; overload; static; inline;
+    class function Write(var Destination:UInt64;const Source:UInt64):UInt64; overload; static; inline;
+    class function Write(var Destination:pointer;const Source:pointer):pointer; overload; static; inline;
+    class function Write(var Destination:TObject;const Source:TObject):TObject; overload; static; inline;
+    class function Write(var Destination:LongBool;const Source:LongBool):LongBool; overload; static; inline;
+  end;
+
   { TNetCustomLockedObject }
 
   TNetCustomLockedObject = class
@@ -33,17 +105,84 @@ type
     procedure UnLock;
   end;
 
+  {$ifdef userwlocks}
+
+  { TNetRWVariable }
+
+  TNetRWVariable = class
+  {$if defined(Windows)}
+  private
+    fSRWLock:TPasMPSRWLock;
+  {$elseif defined(Unix)}
+  private
+    fReadWriteLock:pthread_rwlock_t;
+  {$ifend}
+  public
+    constructor Create;
+    destructor Destroy; override;
+
+    procedure BeginRead;
+    procedure EndRead;
+    procedure BeginWrite;
+    procedure EndWrite;
+  end;
+
+  {$endif}
+
+  { TAtomicVariable }
+
+  generic TAtomicVariable<T{$ifdef AtomicAsInterlocked},ST{$endif}> = class(
+  {$ifdef AtomicAsRW}
+  TNetRWVariable
+  {$else}
+  {$ifdef AtomicAsInterlocked}
+  TNetInterlocked
+  {$else}
+  TNetCustomLockedObject
+  {$endif}
+  {$endif})
+  private
+    FValue : {$ifdef AtomicAsInterlocked}ST{$else}T{$endif};
+    function GetValue: T;
+    procedure SetValue(AValue: T);
+  public
+    constructor Create(aValue : T);
+
+    property Value : T read GetValue write SetValue;
+  end;
+
+  TAtomicBoolean = class(specialize TAtomicVariable<Boolean{$ifdef AtomicAsInterlocked},LongBool{$endif}>);
+  TAtomicPointer = class(specialize TAtomicVariable<Pointer{$ifdef AtomicAsInterlocked},Pointer{$endif}>);
+
+  { TAtomicNumeric }
+
+  generic TAtomicNumeric<T{$ifdef AtomicAsInterlocked},ST{$endif}> = class(specialize TAtomicVariable<T{$ifdef AtomicAsInterlocked},ST{$endif}>)
+  public
+    procedure AddValue(const aValue : T);
+    procedure SubValue(const aValue : T);
+
+    procedure IncValue;
+    procedure DecValue;
+  end;
+
+  TAtomicInteger = class(specialize TAtomicNumeric<Integer{$ifdef AtomicAsInterlocked},Int32{$endif}>);
+  TAtomicCardinal = class(specialize TAtomicNumeric<Cardinal{$ifdef AtomicAsInterlocked},UInt32{$endif}>);
+  TAtomicInt64 = class(specialize TAtomicNumeric<Int64{$ifdef AtomicAsInterlocked},Int64{$endif}>);
+  TAtomicQWord = class(specialize TAtomicNumeric<QWord{$ifdef AtomicAsInterlocked},Uint64{$endif}>);
+
   { TNetReferencedObject }
 
   TNetReferencedObject = class(TNetCustomLockedObject)
   private
-    mReferenceCount : Integer;
+    mReferenceCount : TAtomicInteger;
   public
     constructor Create;
+    destructor Destroy; override;
     procedure IncReference;
     procedure DecReference;
     function HasReferences : Boolean;
     function HasExternReferences : Boolean;
+    function NoReferences: Boolean;
   end;
 
   TNetReferenceOnDisconnect = procedure (v : TNetReferencedObject) of object;
@@ -430,6 +569,479 @@ type
   end;
 
 implementation
+
+{$ifdef userwlocks}
+
+{$if defined(Windows)}
+procedure InitializeSRWLock(SRWLock:PPasMPSRWLock); stdcall; external 'kernel32.dll' name 'InitializeSRWLock';
+procedure AcquireSRWLockShared(SRWLock:PPasMPSRWLock); stdcall; external 'kernel32.dll' name 'AcquireSRWLockShared';
+function TryAcquireSRWLockShared(SRWLock:PPasMPSRWLock):bool; stdcall; external 'kernel32.dll' name 'TryAcquireSRWLockShared';
+procedure ReleaseSRWLockShared(SRWLock:PPasMPSRWLock); stdcall; external 'kernel32.dll' name 'ReleaseSRWLockShared';
+procedure AcquireSRWLockExclusive(SRWLock:PPasMPSRWLock); stdcall; external 'kernel32.dll' name 'AcquireSRWLockExclusive';
+function TryAcquireSRWLockExclusive(SRWLock:PPasMPSRWLock):bool; stdcall; external 'kernel32.dll' name 'TryAcquireSRWLockExclusive';
+procedure ReleaseSRWLockExclusive(SRWLock:PPasMPSRWLock); stdcall; external 'kernel32.dll' name 'ReleaseSRWLockExclusive';
+{$endif}
+
+{ TNetRWVariable }
+
+constructor TNetRWVariable.Create;
+begin
+  {$if defined(Windows)}
+  InitializeSRWLock(@fSRWLock);
+  {$elseif defined(Unix)}
+  pthread_rwlock_init(@fReadWriteLock,nil);
+  {$ifend}
+end;
+
+destructor TNetRWVariable.Destroy;
+begin
+  {$if defined(Windows)}
+  {$elseif defined(Unix)}
+  pthread_rwlock_destroy(@fReadWriteLock);
+  {$ifend}
+  inherited Destroy;
+end;
+
+procedure TNetRWVariable.BeginRead;
+{$if defined(Windows)}
+begin
+  AcquireSRWLockShared(@fSRWLock);
+end;
+{$elseif defined(Unix)}
+begin
+  pthread_rwlock_rdlock(@fReadWriteLock);
+end;
+{$ifend}
+
+procedure TNetRWVariable.EndRead;
+{$if defined(Windows)}
+begin
+  ReleaseSRWLockShared(@fSRWLock);
+end;
+{$elseif defined(Unix)}
+begin
+  pthread_rwlock_unlock(@fReadWriteLock);
+end;
+{$ifend}
+
+procedure TNetRWVariable.BeginWrite;
+{$if defined(Windows)}
+begin
+  AcquireSRWLockExclusive(@fSRWLock);
+end;
+{$elseif defined(Unix)}
+begin
+  pthread_rwlock_wrlock(@fReadWriteLock);
+end;
+{$ifend}
+
+procedure TNetRWVariable.EndWrite;
+{$if defined(Windows)}
+begin
+  ReleaseSRWLockExclusive(@fSRWLock);
+end;
+{$elseif defined(Unix)}
+begin
+  pthread_rwlock_unlock(@fReadWriteLock);
+end;
+{$ifend}
+
+{$endif}
+
+{ TAtomicNumeric }
+
+procedure TAtomicNumeric.AddValue(const aValue: T);
+begin
+  {$if defined(AtomicAsRW)}
+  BeginWrite;
+  try
+    FValue += aValue;
+  finally
+    EndWrite;
+  end;
+  {$elseif defined(AtomicAsInterlocked)}
+  Add(FValue, ST(aValue));
+  {$else}
+  Lock;
+  try
+    FValue += aValue;
+  finally
+    UnLock;
+  end;
+  {$ifend}
+end;
+
+procedure TAtomicNumeric.SubValue(const aValue: T);
+begin
+  {$if defined(AtomicAsRW)}
+  BeginWrite;
+  try
+    FValue -= aValue;
+  finally
+    EndWrite;
+  end;
+  {$elseif defined(AtomicAsInterlocked)}
+  Sub(FValue, ST(aValue));
+  {$else}
+  Lock;
+  try
+    FValue -= aValue;
+  finally
+    UnLock;
+  end;
+  {$ifend}
+end;
+
+procedure TAtomicNumeric.IncValue;
+begin
+  {$if defined(AtomicAsRW)}
+  BeginWrite;
+  try
+    Inc(FValue);
+  finally
+    EndWrite;
+  end;
+  {$elseif defined(AtomicAsInterlocked)}
+  Increment(FValue);
+  {$else}
+  Lock;
+  try
+    Inc(FValue);
+  finally
+    UnLock;
+  end;
+  {$ifend}
+end;
+
+procedure TAtomicNumeric.DecValue;
+begin
+  {$if defined(AtomicAsRW)}
+  BeginWrite;
+  try
+    Dec(FValue);
+  finally
+    EndWrite;
+  end;
+  {$elseif defined(AtomicAsInterlocked)}
+  Decrement(FValue);
+  {$else}
+  Lock;
+  try
+    Dec(FValue);
+  finally
+    UnLock;
+  end;
+  {$ifend}
+end;
+
+{ TAtomicVariable }
+
+function TAtomicVariable.GetValue: T;
+begin
+  {$if defined(AtomicAsRW)}
+  BeginRead;
+  try
+    Result := FValue;
+  finally
+    EndRead;
+  end;
+  {$elseif defined(AtomicAsInterlocked)}
+  Result := T(Read(FValue));
+  {$else}
+  Lock;
+  try
+    Result := FValue;
+  finally
+    UnLock;
+  end;
+  {$ifend}
+end;
+
+procedure TAtomicVariable.SetValue(AValue: T);
+begin
+  {$if defined(AtomicAsRW)}
+  BeginWrite;
+  try
+    FValue := AValue;
+  finally
+    EndWrite;
+  end;
+  {$elseif defined(AtomicAsInterlocked)}
+  Write(FValue, ST(AValue));
+  {$else}
+  Lock;
+  try
+    FValue := AValue;
+  finally
+    UnLock;
+  end;
+  {$ifend}
+end;
+
+constructor TAtomicVariable.Create(aValue: T);
+begin
+  inherited Create;
+  FValue := aValue;
+end;
+
+{ TNetInterlocked }
+
+class function TNetInterlocked.Increment(var Destination: Int32): Int32;
+begin
+  result:=InterlockedIncrement(Destination);
+end;
+
+class function TNetInterlocked.Increment(var Destination: UInt32): UInt32;
+begin
+  result:=InterlockedIncrement(Destination);
+end;
+
+class function TNetInterlocked.Increment(var Destination: Int64): Int64;
+begin
+  result:=InterlockedIncrement64(Destination);
+end;
+
+class function TNetInterlocked.Increment(var Destination: UInt64): UInt64;
+begin
+  result:=InterlockedIncrement64(Destination);
+end;
+
+class function TNetInterlocked.Decrement(var Destination: Int32): Int32;
+begin
+  result:=InterlockedDecrement(Destination);
+end;
+
+class function TNetInterlocked.Decrement(var Destination: UInt32): UInt32;
+begin
+  result:=InterlockedDecrement(Destination);
+end;
+
+class function TNetInterlocked.Decrement(var Destination: Int64): Int64;
+begin
+  result:=InterlockedDecrement64(Destination);
+end;
+
+class function TNetInterlocked.Decrement(var Destination: UInt64): UInt64;
+begin
+  result:=InterlockedDecrement64(Destination);
+end;
+
+class function TNetInterlocked.Add(var Destination: Int32;
+  const Value: Int32): Int32;
+begin
+  result:=InterlockedExchangeAdd(Destination,Value);
+end;
+
+class function TNetInterlocked.Add(var Destination: UInt32;
+  const Value: UInt32): UInt32;
+begin
+  result:=InterlockedExchangeAdd(Destination,Value);
+end;
+
+class function TNetInterlocked.Add(var Destination: Int64; const Value: Int64
+  ): Int64;
+begin
+  result:=InterlockedExchangeAdd64(Destination,Value);
+end;
+
+class function TNetInterlocked.Add(var Destination: UInt64; const Value: UInt64
+  ): UInt64;
+begin
+  result:=InterlockedExchangeAdd64(Destination,Value);
+end;
+
+class function TNetInterlocked.Sub(var Destination: Int32;
+  const Value: Int32): Int32;
+begin
+  result:=InterlockedExchangeAdd(Destination,-Value);
+end;
+
+class function TNetInterlocked.Sub(var Destination: UInt32;
+  const Value: UInt32): UInt32;
+begin
+  result:=UInt32(Int32(InterlockedExchangeAdd(Destination,-Int32(Value))));
+end;
+
+class function TNetInterlocked.Sub(var Destination: Int64; const Value: Int64
+  ): Int64;
+begin
+  result:=InterlockedExchangeAdd64(Destination,-Value);
+end;
+
+class function TNetInterlocked.Sub(var Destination: UInt64; const Value: UInt64
+  ): UInt64;
+begin
+  result:=UInt64(Int64(InterlockedExchangeAdd64(Destination,-Int64(Value))));
+end;
+
+class function TNetInterlocked.Exchange(var Destination: Int32;
+  const Source: Int32): Int32;
+begin
+  result:=InterlockedExchange(Destination,Source);
+end;
+
+class function TNetInterlocked.Exchange(var Destination: UInt32;
+  const Source: UInt32): UInt32;
+begin
+  result:=InterlockedExchange(Destination,Source);
+end;
+
+class function TNetInterlocked.Exchange(var Destination: Int64;
+  const Source: Int64): Int64;
+begin
+  result:=InterlockedExchange64(Destination,Source);
+end;
+
+class function TNetInterlocked.Exchange(var Destination: UInt64;
+  const Source: UInt64): UInt64;
+begin
+  result:=InterlockedExchange64(Destination,Source);
+end;
+
+class function TNetInterlocked.Exchange(var Destination: pointer;
+  const Source: pointer): pointer;
+begin
+  result:=InterlockedExchange(Destination,Source);
+end;
+
+class function TNetInterlocked.Exchange(var Destination: TObject;
+  const Source: TObject): TObject;
+begin
+  result:=TObject(InterlockedExchange(Pointer(Destination),Pointer(Source)));
+end;
+
+class function TNetInterlocked.Exchange(var Destination: LongBool;
+  const Source: LongBool): LongBool;
+begin
+  result:=LongBool(Int32(InterlockedExchange(Int32(Destination),Int32(Source))));
+end;
+
+class function TNetInterlocked.CompareExchange(var Destination: Int32;
+  const NewValue, Comperand: Int32): Int32;
+begin
+  result:=InterlockedCompareExchange(Destination,NewValue,Comperand);
+end;
+
+class function TNetInterlocked.CompareExchange(var Destination: UInt32;
+  const NewValue, Comperand: UInt32): UInt32;
+begin
+  result:=InterlockedCompareExchange(Destination,NewValue,Comperand);
+end;
+
+class function TNetInterlocked.CompareExchange(var Destination: Int64;
+  const NewValue, Comperand: Int64): Int64;
+begin
+  result:=InterlockedCompareExchange64(Destination,NewValue,Comperand);
+end;
+
+class function TNetInterlocked.CompareExchange(var Destination: UInt64;
+  const NewValue, Comperand: UInt64): UInt64;
+begin
+  result:=InterlockedCompareExchange64(Destination,NewValue,Comperand);
+end;
+
+class function TNetInterlocked.CompareExchange(var Destination: pointer;
+  const NewValue, Comperand: pointer): pointer;
+begin
+  result:=InterlockedCompareExchangePointer(Destination,NewValue,Comperand);
+end;
+
+class function TNetInterlocked.CompareExchange(var Destination: TObject;
+  const NewValue, Comperand: TObject): TObject;
+begin
+  result:=TObject(InterlockedCompareExchangePointer(pointer(Destination),
+                                                    pointer(NewValue),
+                                                    pointer(Comperand)));
+end;
+
+class function TNetInterlocked.CompareExchange(var Destination: LongBool;
+  const NewValue, Comperand: LongBool): LongBool;
+begin
+  result:=LongBool(Int32(InterlockedCompareExchange(Int32(Destination),
+                                                    Int32(NewValue),
+                                                    Int32(Comperand))));
+end;
+
+class function TNetInterlocked.Read(var Source: Int32): Int32;
+begin
+  result:=InterlockedCompareExchange(Source,0,0);
+end;
+
+class function TNetInterlocked.Read(var Source: UInt32): UInt32;
+begin
+ result:=UInt32(InterlockedCompareExchange(Int32(Source),0,0));
+end;
+
+class function TNetInterlocked.Read(var Source: Int64): Int64;
+begin
+  result:=InterlockedCompareExchange64(Source,0,0);
+end;
+
+class function TNetInterlocked.Read(var Source: UInt64): UInt64;
+begin
+  result:=UInt64(InterlockedCompareExchange64(Int64(Source),0,0));
+end;
+
+class function TNetInterlocked.Read(var Source: pointer): pointer;
+begin
+  result:=InterlockedCompareExchangePointer(Pointer(Source),
+                                            Pointer(PtrInt(0)),
+                                            Pointer(PtrInt(0)));
+end;
+
+class function TNetInterlocked.Read(var Source: TObject): TObject;
+begin
+  result:=TObject(InterlockedCompareExchangePointer(Pointer(Source),
+                                                    Pointer(PtrInt(0)),
+                                                    Pointer(PtrInt(0))));
+end;
+
+class function TNetInterlocked.Read(var Source: LongBool): LongBool;
+begin
+  result:=LongBool(InterlockedCompareExchange(Int32(Source),0,0));
+end;
+
+class function TNetInterlocked.Write(var Destination: Int32;
+  const Source: Int32): Int32;
+begin
+  result := Exchange(Destination, Source);
+end;
+
+class function TNetInterlocked.Write(var Destination: UInt32;
+  const Source: UInt32): UInt32;
+begin
+  result := Exchange(Destination, Source);
+end;
+
+class function TNetInterlocked.Write(var Destination: Int64;
+  const Source: Int64): Int64;
+begin
+  result := Exchange(Destination, Source);
+end;
+
+class function TNetInterlocked.Write(var Destination: UInt64;
+  const Source: UInt64): UInt64;
+begin
+  result := Exchange(Destination, Source);
+end;
+
+class function TNetInterlocked.Write(var Destination: pointer;
+  const Source: pointer): pointer;
+begin
+  result := Exchange(Destination, Source);
+end;
+
+class function TNetInterlocked.Write(var Destination: TObject;
+  const Source: TObject): TObject;
+begin
+  result := Exchange(Destination, Source);
+end;
+
+class function TNetInterlocked.Write(var Destination: LongBool;
+  const Source: LongBool): LongBool;
+begin
+  result := Exchange(Destination, Source);
+end;
 
 { TThreadActiveFastBaseCollection }
 
@@ -1582,7 +2194,7 @@ end;
 function TNetReferenceList.IfNoReferences(obj : Tobject; ptr : pointer
   ) : Boolean;
 begin
-  Result := TNetReferencedObject(obj).mReferenceCount <= 0;
+  Result := TNetReferencedObject(obj).NoReferences;
 end;
 
 { TNetReferencedObject }
@@ -1590,47 +2202,38 @@ end;
 constructor TNetReferencedObject.Create;
 begin
   inherited Create;
-  mReferenceCount:= 1;
+  mReferenceCount:= TAtomicInteger.Create(1);
+end;
+
+destructor TNetReferencedObject.Destroy;
+begin
+  mReferenceCount.Free;
+  inherited Destroy;
 end;
 
 procedure TNetReferencedObject.IncReference;
 begin
-  Lock;
-  try
-    Inc(mReferenceCount);
-  finally
-    UnLock;
-  end;
+  mReferenceCount.IncValue;
 end;
 
 procedure TNetReferencedObject.DecReference;
 begin
-  Lock;
-  try
-    Dec(mReferenceCount);
-  finally
-    UnLock;
-  end;
+  mReferenceCount.DecValue;
 end;
 
 function TNetReferencedObject.HasReferences: Boolean;
 begin
-  Lock;
-  try
-    Result := mReferenceCount > 0;
-  finally
-    UnLock;
-  end;
+  Result := mReferenceCount.Value > 0;
 end;
 
 function TNetReferencedObject.HasExternReferences: Boolean;
 begin
-  Lock;
-  try
-    Result := mReferenceCount > 1;
-  finally
-    UnLock;
-  end;
+  Result := mReferenceCount.Value > 1;
+end;
+
+function TNetReferencedObject.NoReferences: Boolean;
+begin
+  Result := mReferenceCount.Value <= 0;
 end;
 
 { TNetCustomLockedObject }
