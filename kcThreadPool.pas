@@ -134,15 +134,15 @@ type
   TThreadPool = class
   private
     FPool: TFastList;
-    FList: TFastList;
+    FList: TFastSeq;
     FEvent : PRTLEvent;
     FJobMap : TIDJobMap;
     FCS: TCriticalSection;
     FThreadsCount : Integer;
     FRunning: Boolean;
+    function FindByClass(obj: TObject; data: Pointer): Boolean;
     procedure Signal;
     function WaitJobs : Boolean;
-    function GetJobAt(index : integer): TJob;
     function GetJobsCount: Integer;
     function GetRunningThreads: Integer;
     procedure ExcludeThread(aThread : TCustomThread);
@@ -165,7 +165,6 @@ type
     property CriticalSection: TCriticalSection read FCS;
     property JobsCount: Integer read GetJobsCount;
     property ThreadsCount: Integer read FThreadsCount;
-    property Job[index : integer] : TJob read GetJobAt;
   end;
 
 var
@@ -477,14 +476,13 @@ begin
     begin
       if FList.Count > 0 then
       begin
-        Result := TJob(FList[0]);
-        FList.Delete(0);
+        Result := TJob(FList.PopValue);
       end
     end;
   finally
     FCS.Leave;
   end;
-  if  (FJobMap.JobCount > 0) or (FList.Count > 0) then
+  if  (FList.Count > 0) or (assigned(FJobMap) and (FJobMap.JobCount > 0)) then
   begin
     Signal;
   end;
@@ -498,17 +496,11 @@ end;
 function TThreadPool.WaitJobs: Boolean;
 begin
   RTLEventWaitFor(FEvent);
-  Result := (FJobMap.JobCount = 0) and (FList.Count = 0);
-end;
-
-function TThreadPool.GetJobAt(index : integer): TJob;
-begin
-  FCS.Enter;
-  try
-    Result := TJob(FList[index]);
-  finally
-    FCS.Leave;
-  end;
+  if assigned(FJobMap) then
+    Result := (FJobMap.JobCount = 0)
+  else
+    Result := true;
+  Result := Result and (FList.Count = 0);
 end;
 
 function TThreadPool.GetJobsCount: Integer;
@@ -558,7 +550,7 @@ var
 begin
   FPool := TFastList.Create;
   FCS   := TCriticalSection.Create;
-  FList := TFastList.Create;
+  FList := TFastSeq.Create;
   FJobMap := nil;
   FThreadsCount := FThreads;
   FEvent:= RTLEventCreate;
@@ -574,26 +566,17 @@ begin
   end;
 end;
 
+function TThreadPool.FindByClass(obj : TObject; data : Pointer) : Boolean;
+begin
+  Result := (not assigned(data)) or (obj is TJobClass(data));
+end;
+
 function TThreadPool.ClearJobs(JC: TJobClass): integer;
-var j : TJob;
-  i : integer;
 begin
   Result := 0;;
   FCS.Enter;
   try
-    i := 0;
-    while (i < FList.Count) do
-    begin
-      j := TJob(FList[0]);
-      if (not assigned(jc)) or
-         (j is jc) then
-      begin
-        FList.Delete(0);
-        Inc(Result);
-        j.Free;
-      end else
-        inc(i);
-    end;
+    if FList.EraseObjectsByCriteria(@FindByClass, JC) then Result := 1;
   finally
     FCS.Leave;
   end;
@@ -645,12 +628,7 @@ begin
 
   FPool.Free;
 
-  for i := 0 to FList.Count - 1 do
-  begin
-    o := FList[i];
-    if Assigned(o) then
-      o.Free;
-  end;
+  FList.Clean;
 
   FList.Free;
   FCS.Free;
@@ -689,7 +667,7 @@ begin
   Semaphore.Activate;
   FCS.Enter;
   try
-    FList.Add(j);
+    FList.Push_back(j);
   finally
     FCS.Leave;
   end;
@@ -699,10 +677,11 @@ procedure TThreadPool.Add(AJob: TJob);
 begin
   FCS.Enter;
   try
-    FList.Add(AJob);
+    FList.Push_back(AJob);
   finally
     FCS.Leave;
   end;
+  Signal;
 end;
 
 procedure TThreadPool.GenerateJobMap;
@@ -713,6 +692,7 @@ end;
 procedure TThreadPool.AddID(PID: Cardinal; AJob: TJob);
 begin
   FJobMap.Push(PID, aJob);
+  Signal;
 end;
 
 procedure TThreadPool.Execute;
