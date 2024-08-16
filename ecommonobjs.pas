@@ -17,12 +17,21 @@ unit ECommonObjs;
 
 {.$define AtomicAsRW}
 {$define AtomicAsInterlocked}
+{$define UseLibInterlockedOps}
 {.$define AtomicAsCS}
 {$ifdef AtomicAsRW}
 {$define userwlocks}
 {$else}
 {.$define userwlocks}
 {$endif}
+
+{$IF defined(CPUX86_64) or defined(CPUX64)}
+  {$DEFINE x64}
+{$ELSEIF defined(CPU386)}
+  {$DEFINE x86}
+{$ELSE}
+  {$undef UseLibInterlockedOps}
+{$IFEND}
 
 interface
 
@@ -91,6 +100,28 @@ type
     class function Write(var Destination:pointer;const Source:pointer):pointer; overload; static; inline;
     class function Write(var Destination:TObject;const Source:TObject):TObject; overload; static; inline;
     class function Write(var Destination:LongBool;const Source:LongBool):LongBool; overload; static; inline;
+    {$ifdef UseLibInterlockedOps}
+    class function InterlockedAnd(var A: QWord; B: QWord): QWord; overload; static; inline;
+    class function InterlockedAnd(var A: Int64; B: Int64): Int64; overload; static; inline;
+    class function InterlockedAnd(var A: Int32; B: Int32): Int32; overload; static; inline;
+    class function InterlockedAnd(var A: Cardinal; B: Cardinal): Cardinal; overload; static; inline;
+    class function InterlockedAnd(var A: LongBool; B: LongBool): LongBool; overload; static; inline;
+    class function InterlockedOr(var A: QWord; B: QWord): QWord; overload; static; inline;
+    class function InterlockedOr(var A: Int64; B: Int64): Int64; overload; static; inline;
+    class function InterlockedOr(var A: Int32; B: Int32): Int32; overload; static; inline;
+    class function InterlockedOr(var A: Cardinal; B: Cardinal): Cardinal; overload; static; inline;
+    class function InterlockedOr(var A: LongBool; B: LongBool): LongBool; overload; static; inline;
+    class function InterlockedXor(var A: QWord; B: QWord): QWord; overload; static; inline;
+    class function InterlockedXor(var A: Int64; B: Int64): Int64; overload; static; inline;
+    class function InterlockedXor(var A: Int32; B: Int32): Int32; overload; static; inline;
+    class function InterlockedXor(var A: Cardinal; B: Cardinal): Cardinal; overload; static; inline;
+    class function InterlockedXor(var A: LongBool; B: LongBool): LongBool; overload; static; inline;
+    class function InterlockedNot(var A: QWord): QWord; overload; static; inline;
+    class function InterlockedNot(var A: Int64): Int64; overload; static; inline;
+    class function InterlockedNot(var A: Int32): Int32; overload; static; inline;
+    class function InterlockedNot(var A: Cardinal): Cardinal; overload; static; inline;
+    class function InterlockedNot(var A: LongBool): LongBool; overload; static; inline;
+    {$endif}
   end;
 
   { TNetCustomLockedObject }
@@ -158,8 +189,12 @@ type
 
   generic TAtomicNumeric<T{$ifdef AtomicAsInterlocked},ST{$endif}> = class(specialize TAtomicVariable<T{$ifdef AtomicAsInterlocked},ST{$endif}>)
   public
-    procedure AddValue(const aValue : T);
-    procedure SubValue(const aValue : T);
+    function AddValue(const aValue : T) : T;
+    function SubValue(const aValue : T) : T;
+    function AndValue(const aValue : T) : T;
+    function OrValue(const aValue : T) : T;
+    function XorValue(const aValue : T) : T;
+    function NotValue() : T;
 
     procedure IncValue;
     procedure DecValue;
@@ -570,6 +605,616 @@ type
 
 implementation
 
+{$ifdef USELIBINTERLOCKEDOPS}
+
+{$ASMMODE Intel}
+{$IFDEF x64}
+  {$DEFINE Ptr64}
+{$ELSE SizeOf(Pointer) <> 4}
+  {$MESSAGE FATAL 'Unsupported size of pointers.'}
+{$ENDIF}
+
+{
+   This code block based on InterlockedOps library  Version 1.4.2 (2022-02-21)
+   git@github.com:iLya2IK/lib.InterlockedOps.git
+   ©2021-2024 Frantisek Milt
+   Contacts:
+     Frantisek Milt: frantisek.milt@gmail.com
+}
+
+//------------------------------------------------------------------------------
+
+Function InterlockedLoad32(I: Pointer): UInt32;
+begin
+asm
+          XOR   EDX, EDX
+{$IFDEF x64}
+  {$IFDEF Windows}
+    LOCK  XADD  dword ptr [RCX], EDX
+  {$ELSE}
+    LOCK  XADD  dword ptr [RDI], EDX
+  {$ENDIF}
+{$ELSE}
+    LOCK  XADD  dword ptr [EAX], EDX
+{$ENDIF}
+          MOV   EAX, EDX
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function InterlockedLoad64(I: Pointer): UInt64;
+begin
+asm
+{$IFDEF x64}
+
+          XOR   RDX, RDX
+  {$IFDEF Windows}
+    LOCK  XADD  qword ptr [RCX], RDX
+  {$ELSE}
+    LOCK  XADD  qword ptr [RDI], RDX
+  {$ENDIF}
+          MOV   RAX, RDX
+
+{$ELSE}// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+
+          PUSH  EBX
+          PUSH  EDI
+
+          MOV   EDI, EAX
+
+    @TryOutStart:
+
+          MOV   EAX, dword ptr [EDI]
+          MOV   EDX, dword ptr [EDI + 4]
+
+          MOV   EBX, EAX
+          MOV   ECX, EDX
+
+    LOCK  CMPXCHG8B qword ptr [EDI]
+
+          JNZ   @TryOutStart
+
+          POP   EDI
+          POP   EBX
+
+{$ENDIF}
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function InterlockedLoadBool(I: Pointer): Boolean;
+begin
+Result := Boolean(InterlockedLoad32(I));
+end;
+
+//------------------------------------------------------------------------------
+
+Function InterlockedStore32(I: Pointer; NewValue: UInt32): UInt32;
+begin
+asm
+{$IFDEF x64}
+  {$IFDEF Windows}
+
+    LOCK  XCHG  dword ptr [RCX], EDX
+          MOV   EAX, EDX
+
+  {$ELSE}//  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+
+    LOCK  XCHG  dword ptr [RDI], ESI
+          MOV   EAX, ESI
+
+  {$ENDIF}
+{$ELSE}// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+
+    LOCK  XCHG  dword ptr [EAX], EDX
+          MOV   EAX, EDX
+
+{$ENDIF}
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function InterlockedStore64(I: Pointer; NewValue: UInt64): UInt64;
+begin
+asm
+{$IFDEF x64}
+  {$IFDEF Windows}
+
+    LOCK  XCHG  qword ptr [RCX], RDX
+          MOV   RAX, RDX
+
+  {$ELSE}//  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+
+    LOCK  XCHG  qword ptr [RDI], RSI
+          MOV   RAX, RSI
+
+  {$ENDIF}
+{$ELSE}// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+
+          PUSH  EBX
+          PUSH  EDI
+
+          MOV   EDI, EAX
+
+    @TryOutStart:
+
+          MOV   EBX, dword ptr [NewValue]
+          MOV   ECX, dword ptr [NewValue + 4]
+
+          MOV   EAX, dword ptr [EDI]
+          MOV   EDX, dword ptr [EDI + 4]
+
+    LOCK  CMPXCHG8B qword ptr [EDI]
+
+          JNZ   @TryOutStart
+
+          POP   EDI
+          POP   EBX
+
+{$ENDIF}
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function InterlockedStoreBool(I: Pointer; NewValue: Boolean): Boolean;
+begin
+Result := Boolean(InterlockedStore32(I,UInt32(NewValue)));
+end;
+
+//------------------------------------------------------------------------------
+
+Function InterlockedAnd32(A: Pointer; B: UInt32): UInt32;
+begin
+asm
+{$IFDEF x64}
+
+    @TryOutStart:
+
+  {$IFDEF Windows}
+          MOV   EAX, dword ptr [RCX]
+  {$ELSE}
+          MOV   EAX, dword ptr [RDI]
+  {$ENDIF}
+
+          MOV   R8D, EAX
+          AND   R8D, B
+
+  {$IFDEF Windows}
+    LOCK  CMPXCHG dword ptr [RCX], R8D
+  {$ELSE}
+    LOCK  CMPXCHG dword ptr [RDI], R8D
+  {$ENDIF}
+
+          JNZ   @TryOutStart
+
+          MOV   EAX, R8D
+
+{$ELSE}// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+
+          PUSH  EBX
+
+          MOV   ECX, EAX
+
+    @TryOutStart:
+
+          MOV   EAX, dword ptr [ECX]
+
+          MOV   EBX, EAX
+          AND   EBX, EDX
+
+    LOCK  CMPXCHG dword ptr [ECX], EBX
+
+          JNZ   @TryOutStart
+
+          MOV   EAX, EBX
+
+          POP   EBX
+
+{$ENDIF}
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function InterlockedAnd64(A: Pointer; B: UInt64): UInt64;
+begin
+asm
+{$IFDEF x64}
+
+    @TryOutStart:
+
+  {$IFDEF Windows}
+          MOV   RAX, qword ptr [RCX]
+  {$ELSE}
+          MOV   RAX, qword ptr [RDI]
+  {$ENDIF}
+
+          MOV   R8, RAX
+          AND   R8, B
+
+  {$IFDEF Windows}
+    LOCK  CMPXCHG qword ptr [RCX], R8
+  {$ELSE}
+    LOCK  CMPXCHG qword ptr [RDI], R8
+  {$ENDIF}
+
+          JNZ   @TryOutStart
+
+          MOV   RAX, R8
+
+{$ELSE}// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+
+          PUSH  EBX
+          PUSH  EDI
+
+          MOV   EDI, EAX
+
+    @TryOutStart:
+
+          MOV   EAX, dword ptr [EDI]
+          MOV   EDX, dword ptr [EDI + 4]
+
+          MOV   EBX, dword ptr [B]
+          MOV   ECX, dword ptr [B + 4]
+
+          AND   EBX, EAX
+          AND   ECX, EDX
+
+    LOCK  CMPXCHG8B qword ptr [EDI]
+
+          JNZ   @TryOutStart
+
+          MOV   EAX, EBX
+          MOV   EDX, ECX
+
+          POP   EDI
+          POP   EBX
+
+{$ENDIF}
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function InterlockedOr32(A: Pointer; B: UInt32): UInt32;
+begin
+asm
+{$IFDEF x64}
+
+    @TryOutStart:
+
+  {$IFDEF Windows}
+          MOV   EAX, dword ptr [RCX]
+  {$ELSE}
+          MOV   EAX, dword ptr [RDI]
+  {$ENDIF}
+
+          MOV   R8D, EAX
+          OR    R8D, B
+
+  {$IFDEF Windows}
+    LOCK  CMPXCHG dword ptr [RCX], R8D
+  {$ELSE}
+    LOCK  CMPXCHG dword ptr [RDI], R8D
+  {$ENDIF}
+
+          JNZ   @TryOutStart
+
+          MOV   EAX, R8D
+
+{$ELSE}// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+
+          PUSH  EBX
+
+          MOV   ECX, EAX
+
+    @TryOutStart:
+
+          MOV   EAX, dword ptr [ECX]
+
+          MOV   EBX, EAX
+          OR    EBX, EDX
+
+    LOCK  CMPXCHG dword ptr [ECX], EBX
+
+          JNZ   @TryOutStart
+
+          MOV   EAX, EBX
+
+          POP   EBX
+
+{$ENDIF}
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function InterlockedOr64(A: Pointer; B: UInt64): UInt64;
+begin
+asm
+{$IFDEF x64}
+
+    @TryOutStart:
+
+  {$IFDEF Windows}
+          MOV   RAX, qword ptr [RCX]
+  {$ELSE}
+          MOV   RAX, qword ptr [RDI]
+  {$ENDIF}
+
+          MOV   R8, RAX
+          OR    R8, B
+
+  {$IFDEF Windows}
+    LOCK  CMPXCHG qword ptr [RCX], R8
+  {$ELSE}
+    LOCK  CMPXCHG qword ptr [RDI], R8
+  {$ENDIF}
+
+          JNZ   @TryOutStart
+
+          MOV   RAX, R8
+
+{$ELSE}// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+
+          PUSH  EBX
+          PUSH  EDI
+
+          MOV   EDI, EAX
+
+    @TryOutStart:
+
+          MOV   EAX, dword ptr [EDI]
+          MOV   EDX, dword ptr [EDI + 4]
+
+          MOV   EBX, dword ptr [B]
+          MOV   ECX, dword ptr [B + 4]
+
+          OR    EBX, EAX
+          OR    ECX, EDX
+
+    LOCK  CMPXCHG8B qword ptr [EDI]
+
+          JNZ   @TryOutStart
+
+          MOV   EAX, EBX
+          MOV   EDX, ECX
+
+          POP   EDI
+          POP   EBX
+
+{$ENDIF}
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function InterlockedXor32(A: Pointer; B: UInt32): UInt32;
+begin
+asm
+{$IFDEF x64}
+
+    @TryOutStart:
+
+  {$IFDEF Windows}
+          MOV   EAX, dword ptr [RCX]
+  {$ELSE}
+          MOV   EAX, dword ptr [RDI]
+  {$ENDIF}
+
+          MOV   R8D, EAX
+          XOR   R8D, B
+
+  {$IFDEF Windows}
+    LOCK  CMPXCHG dword ptr [RCX], R8D
+  {$ELSE}
+    LOCK  CMPXCHG dword ptr [RDI], R8D
+  {$ENDIF}
+
+          JNZ   @TryOutStart
+
+          MOV   EAX, R8D
+
+{$ELSE}// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+
+          PUSH  EBX
+
+          MOV   ECX, EAX
+
+    @TryOutStart:
+
+          MOV   EAX, dword ptr [ECX]
+
+          MOV   EBX, EAX
+          XOR   EBX, EDX
+
+    LOCK  CMPXCHG dword ptr [ECX], EBX
+
+          JNZ   @TryOutStart
+
+          MOV   EAX, EBX
+
+          POP   EBX
+
+{$ENDIF}
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function InterlockedXor64(A: Pointer; B: UInt64): UInt64;
+begin
+asm
+{$IFDEF x64}
+
+    @TryOutStart:
+
+  {$IFDEF Windows}
+          MOV   RAX, qword ptr [RCX]
+  {$ELSE}
+          MOV   RAX, qword ptr [RDI]
+  {$ENDIF}
+
+          MOV   R8, RAX
+          XOR   R8, B
+
+  {$IFDEF Windows}
+    LOCK  CMPXCHG qword ptr [RCX], R8
+  {$ELSE}
+    LOCK  CMPXCHG qword ptr [RDI], R8
+  {$ENDIF}
+
+          JNZ   @TryOutStart
+
+          MOV   RAX, R8
+
+{$ELSE}// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+
+          PUSH  EBX
+          PUSH  EDI
+
+          MOV   EDI, EAX
+
+    @TryOutStart:
+
+          MOV   EAX, dword ptr [EDI]
+          MOV   EDX, dword ptr [EDI + 4]
+
+          MOV   EBX, dword ptr [B]
+          MOV   ECX, dword ptr [B + 4]
+
+          XOR   EBX, EAX
+          XOR   ECX, EDX
+
+    LOCK  CMPXCHG8B qword ptr [EDI]
+
+          JNZ   @TryOutStart
+
+          MOV   EAX, EBX
+          MOV   EDX, ECX
+
+          POP   EDI
+          POP   EBX
+
+{$ENDIF}
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function InterlockedNot32(I: Pointer): UInt32;
+begin
+asm
+{$IFDEF x64}
+
+    @TryOutStart:
+
+  {$IFDEF Windows}
+          MOV   EAX, dword ptr [RCX]
+  {$ELSE}
+          MOV   EAX, dword ptr [RDI]
+  {$ENDIF}
+
+          MOV   EDX, EAX
+          NOT   EDX
+
+  {$IFDEF Windows}
+    LOCK  CMPXCHG dword ptr [RCX], EDX
+  {$ELSE}
+    LOCK  CMPXCHG dword ptr [RDI], EDX
+  {$ENDIF}
+
+          JNZ   @TryOutStart
+
+          MOV   EAX, EDX
+
+{$ELSE}// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+
+          MOV   ECX, EAX
+
+    @TryOutStart:
+
+          MOV   EAX, dword ptr [ECX]
+
+          MOV   EDX, EAX
+          NOT   EDX
+
+    LOCK  CMPXCHG dword ptr [ECX], EDX
+
+          JNZ   @TryOutStart
+
+          MOV   EAX, EDX
+
+{$ENDIF}
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function InterlockedNot64(I: Pointer): UInt64;
+begin
+asm
+{$IFDEF x64}
+
+    @TryOutStart:
+
+  {$IFDEF Windows}
+          MOV   RAX, qword ptr [RCX]
+  {$ELSE}
+          MOV   RAX, qword ptr [RDI]
+  {$ENDIF}
+
+          MOV   RDX, RAX
+          NOT   RDX
+
+  {$IFDEF Windows}
+    LOCK  CMPXCHG qword ptr [RCX], RDX
+  {$ELSE}
+    LOCK  CMPXCHG qword ptr [RDI], RDX
+  {$ENDIF}
+
+          JNZ   @TryOutStart
+
+          MOV   RAX, RDX
+
+{$ELSE}// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+
+          PUSH  EBX
+          PUSH  EDI
+
+          MOV   EDI, EAX
+
+    @TryOutStart:
+
+          MOV   EAX, dword ptr [EDI]
+          MOV   EDX, dword ptr [EDI + 4]
+
+          MOV   EBX, EAX
+          MOV   ECX, EDX
+
+          NOT   EBX
+          NOT   ECX
+
+    LOCK  CMPXCHG8B qword ptr [EDI]
+
+          JNZ   @TryOutStart
+
+          MOV   EAX, EBX
+          MOV   EDX, ECX
+
+          POP   EDI
+          POP   EBX
+
+{$ENDIF}
+end;
+end;
+
+{$endif}
+
 {$ifdef userwlocks}
 
 {$if defined(Windows)}
@@ -650,42 +1295,154 @@ end;
 
 { TAtomicNumeric }
 
-procedure TAtomicNumeric.AddValue(const aValue: T);
+function TAtomicNumeric.AddValue(const aValue: T): T;
 begin
   {$if defined(AtomicAsRW)}
   BeginWrite;
   try
     FValue += aValue;
+    Result := FValue;
   finally
     EndWrite;
   end;
   {$elseif defined(AtomicAsInterlocked)}
-  Add(FValue, ST(aValue));
+  Result := Add(FValue, ST(aValue));
   {$else}
   Lock;
   try
     FValue += aValue;
+    Result := FValue;
   finally
     UnLock;
   end;
   {$ifend}
 end;
 
-procedure TAtomicNumeric.SubValue(const aValue: T);
+function TAtomicNumeric.SubValue(const aValue: T): T;
 begin
   {$if defined(AtomicAsRW)}
   BeginWrite;
   try
     FValue -= aValue;
+    Result := FValue;
   finally
     EndWrite;
   end;
   {$elseif defined(AtomicAsInterlocked)}
-  Sub(FValue, ST(aValue));
+  Result := Sub(FValue, ST(aValue));
   {$else}
   Lock;
   try
     FValue -= aValue;
+    Result := FValue;
+  finally
+    UnLock;
+  end;
+  {$ifend}
+end;
+
+function TAtomicNumeric.AndValue(const aValue: T): T;
+begin
+  {$if defined(AtomicAsRW)}
+  BeginWrite;
+  try
+    FValue := FValue and aValue;
+    Result := FValue;
+  finally
+    EndWrite;
+  end;
+  {$elseif defined(AtomicAsInterlocked)}
+  {$ifdef USELIBINTERLOCKEDOPS}
+  Result := InterlockedAnd(FValue, ST(aValue));
+  {$else}
+  Result := Exchange(FValue, CompareExchange(FValue, 0,0) and aValue);
+  {$endif}
+  {$else}
+  Lock;
+  try
+    FValue := FValue and aValue;
+    Result := FValue;
+  finally
+    UnLock;
+  end;
+  {$ifend}
+end;
+
+function TAtomicNumeric.OrValue(const aValue: T): T;
+begin
+  {$if defined(AtomicAsRW)}
+  BeginWrite;
+  try
+    FValue := FValue or aValue;
+    Result := FValue;
+  finally
+    EndWrite;
+  end;
+  {$elseif defined(AtomicAsInterlocked)}
+  {$ifdef USELIBINTERLOCKEDOPS}
+  Result := InterlockedOr(FValue, ST(aValue));
+  {$else}
+  Result := Exchange(FValue, CompareExchange(FValue, 0,0) or aValue);
+  {$endif}
+  {$else}
+  Lock;
+  try
+    FValue := FValue or aValue;
+    Result := FValue;
+  finally
+    UnLock;
+  end;
+  {$ifend}
+end;
+
+function TAtomicNumeric.XorValue(const aValue: T): T;
+begin
+  {$if defined(AtomicAsRW)}
+  BeginWrite;
+  try
+    FValue := FValue xor aValue;
+    Result := FValue;
+  finally
+    EndWrite;
+  end;
+  {$elseif defined(AtomicAsInterlocked)}
+  {$ifdef USELIBINTERLOCKEDOPS}
+  Result := InterlockedXor(FValue, ST(aValue));
+  {$else}
+  Result := Exchange(FValue, CompareExchange(FValue, 0,0) xor aValue);
+  {$endif}
+  {$else}
+  Lock;
+  try
+    FValue := FValue xor aValue;
+    Result := FValue;
+  finally
+    UnLock;
+  end;
+  {$ifend}
+end;
+
+function TAtomicNumeric.NotValue: T;
+begin
+  {$if defined(AtomicAsRW)}
+  BeginWrite;
+  try
+    FValue := not FValue;
+    Result := FValue;
+  finally
+    EndWrite;
+  end;
+  {$elseif defined(AtomicAsInterlocked)}
+  {$ifdef USELIBINTERLOCKEDOPS}
+  Result := InterlockedNot(FValue);
+  {$else}
+  Result := Exchange(FValue, not CompareExchange(FValue, 0,0));
+  {$endif}
+  {$else}
+  Lock;
+  try
+    FValue := not FValue;
+    Result := FValue;
   finally
     UnLock;
   end;
@@ -785,6 +1542,111 @@ begin
 end;
 
 { TNetInterlocked }
+
+class function TNetInterlocked.InterlockedAnd(var A: QWord; B: QWord): QWord;
+begin
+   Result := QWord(InterlockedAnd64(@A, Uint64(B)));
+end;
+
+class function TNetInterlocked.InterlockedAnd(var A: Int64; B: Int64): Int64;
+begin
+   Result := Int64(InterlockedAnd64(@A, Uint64(B)));
+end;
+
+class function TNetInterlocked.InterlockedAnd(var A: Int32; B: Int32): Int32;
+begin
+   Result := Int64(InterlockedAnd32(@A, UInt32(B)));
+end;
+
+class function TNetInterlocked.InterlockedAnd(var A: Cardinal; B: Cardinal): Cardinal;
+begin
+   Result := Cardinal(InterlockedAnd32(@A, UInt32(B)));
+end;
+
+class function TNetInterlocked.InterlockedAnd(var A: LongBool; B: LongBool
+  ): LongBool;
+begin
+  Result := LongBool(InterlockedAnd32(@A, UInt32(B)));
+end;
+
+class function TNetInterlocked.InterlockedOr(var A: QWord; B: QWord): QWord;
+begin
+  Result := QWord(InterlockedOr64(@A, Uint64(B)));
+end;
+
+class function TNetInterlocked.InterlockedOr(var A: Int64; B: Int64): Int64;
+begin
+  Result := Int64(InterlockedOr64(@A, Uint64(B)));
+end;
+
+class function TNetInterlocked.InterlockedOr(var A: Int32; B: Int32): Int32;
+begin
+  Result := Int32(InterlockedOr32(@A, Uint32(B)));
+end;
+
+class function TNetInterlocked.InterlockedOr(var A: Cardinal; B: Cardinal
+  ): Cardinal;
+begin
+  Result := Cardinal(InterlockedOr32(@A, Uint32(B)));
+end;
+
+class function TNetInterlocked.InterlockedOr(var A: LongBool; B: LongBool
+  ): LongBool;
+begin
+  Result := LongBool(InterlockedOr32(@A, Uint32(B)));
+end;
+
+class function TNetInterlocked.InterlockedXor(var A: QWord; B: QWord): QWord;
+begin
+  Result := QWord(InterlockedXor64(@A, Uint64(B)));
+end;
+
+class function TNetInterlocked.InterlockedXor(var A: Int64; B: Int64): Int64;
+begin
+  Result := Int64(InterlockedXor64(@A, Uint64(B)));
+end;
+
+class function TNetInterlocked.InterlockedXor(var A: Int32; B: Int32): Int32;
+begin
+  Result := Int32(InterlockedXor32(@A, Uint32(B)));
+end;
+
+class function TNetInterlocked.InterlockedXor(var A: Cardinal; B: Cardinal
+  ): Cardinal;
+begin
+  Result := Cardinal(InterlockedXor32(@A, Uint32(B)));
+end;
+
+class function TNetInterlocked.InterlockedXor(var A: LongBool; B: LongBool
+  ): LongBool;
+begin
+  Result := LongBool(InterlockedXor32(@A, Uint32(B)));
+end;
+
+class function TNetInterlocked.InterlockedNot(var A: QWord): QWord;
+begin
+  Result := QWord(InterlockedNot64(@A));
+end;
+
+class function TNetInterlocked.InterlockedNot(var A: Int64): Int64;
+begin
+  Result := Int64(InterlockedNot64(@A));
+end;
+
+class function TNetInterlocked.InterlockedNot(var A: Int32): Int32;
+begin
+  Result := Int32(InterlockedNot32(@A));
+end;
+
+class function TNetInterlocked.InterlockedNot(var A: Cardinal): Cardinal;
+begin
+  Result := Cardinal(InterlockedNot32(@A));
+end;
+
+class function TNetInterlocked.InterlockedNot(var A: LongBool): LongBool;
+begin
+  Result := LongBool(InterlockedNot32(@A));
+end;
 
 class function TNetInterlocked.Increment(var Destination: Int32): Int32;
 begin
@@ -964,22 +1826,38 @@ end;
 
 class function TNetInterlocked.Read(var Source: Int32): Int32;
 begin
+{$ifdef USELIBINTERLOCKEDOPS}
+  result := Int32(InterlockedLoad32(@Source));
+{$else}
   result:=InterlockedCompareExchange(Source,0,0);
+{$endif}
 end;
 
 class function TNetInterlocked.Read(var Source: UInt32): UInt32;
 begin
+{$ifdef USELIBINTERLOCKEDOPS}
+result := InterlockedLoad32(@Source);
+{$else}
  result:=UInt32(InterlockedCompareExchange(Int32(Source),0,0));
+{$endif}
 end;
 
 class function TNetInterlocked.Read(var Source: Int64): Int64;
 begin
+{$ifdef USELIBINTERLOCKEDOPS}
+  result := Int64(InterlockedLoad64(@Source));
+{$else}
   result:=InterlockedCompareExchange64(Source,0,0);
+{$endif}
 end;
 
 class function TNetInterlocked.Read(var Source: UInt64): UInt64;
 begin
+{$ifdef USELIBINTERLOCKEDOPS}
+  result := UInt64(InterlockedLoad64(@Source));
+{$else}
   result:=UInt64(InterlockedCompareExchange64(Int64(Source),0,0));
+{$endif}
 end;
 
 class function TNetInterlocked.Read(var Source: pointer): pointer;
@@ -998,31 +1876,51 @@ end;
 
 class function TNetInterlocked.Read(var Source: LongBool): LongBool;
 begin
+{$ifdef USELIBINTERLOCKEDOPS}
+  result := LongBool(InterlockedLoad32(@Source));
+{$else}
   result:=LongBool(InterlockedCompareExchange(Int32(Source),0,0));
+{$endif}
 end;
 
 class function TNetInterlocked.Write(var Destination: Int32;
   const Source: Int32): Int32;
 begin
+{$ifdef USELIBINTERLOCKEDOPS}
+  result := Int32(InterlockedStore32(@Destination, Uint32(Source)));
+{$else}
   result := Exchange(Destination, Source);
+{$endif}
 end;
 
 class function TNetInterlocked.Write(var Destination: UInt32;
   const Source: UInt32): UInt32;
 begin
+{$ifdef USELIBINTERLOCKEDOPS}
+  result := InterlockedStore32(@Destination, Source);
+{$else}
   result := Exchange(Destination, Source);
+{$endif}
 end;
 
 class function TNetInterlocked.Write(var Destination: Int64;
   const Source: Int64): Int64;
 begin
+{$ifdef USELIBINTERLOCKEDOPS}
+  result := Int64(InterlockedStore64(@Destination, UInt64(Source)));
+{$else}
   result := Exchange(Destination, Source);
+{$endif}
 end;
 
 class function TNetInterlocked.Write(var Destination: UInt64;
   const Source: UInt64): UInt64;
 begin
+{$ifdef USELIBINTERLOCKEDOPS}
+  result := InterlockedStore64(@Destination, Source);
+{$else}
   result := Exchange(Destination, Source);
+{$endif}
 end;
 
 class function TNetInterlocked.Write(var Destination: pointer;
@@ -1040,7 +1938,11 @@ end;
 class function TNetInterlocked.Write(var Destination: LongBool;
   const Source: LongBool): LongBool;
 begin
+{$ifdef USELIBINTERLOCKEDOPS}
+  result := LongBool(InterlockedStore32(@Destination, Uint32(Source)));
+{$else}
   result := Exchange(Destination, Source);
+{$endif}
 end;
 
 { TThreadActiveFastBaseCollection }
