@@ -17,7 +17,7 @@ uses
 
 type
   PNumByteArray = ^TNumByteArray;
-  TNumByteArray = array[0..MaxInt] of Byte;
+  TNumByteArray = array[0..MaxInt shr 4] of Byte;
 
   { TFastBaseNumericList }
 
@@ -34,6 +34,9 @@ type
     type
       TTypeList = array[0..MaxInt shr 4] of T;
       PTypeList = ^TTypeList;
+      {$ifndef CPUX86_64}
+      PT = ^T;
+      {$endif}
     function Get(Index : Integer) : T;
     function GetList : PTypeList; inline;
     // methods for sorted lists

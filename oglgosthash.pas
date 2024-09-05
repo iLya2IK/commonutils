@@ -98,7 +98,7 @@ end;
 { Xor two sequences of bytes }
 procedure xor_blocks(result : PByte; const a, b : PByte; len : Int64);
 var
-  i : Int64;
+  i : Int32;
 begin
   for i := 0 to len-1 do
     result[i] := a[i] xor b[i];

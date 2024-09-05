@@ -1,6 +1,6 @@
 {
  SortedThreadPool
-   Modul fo async execution of clients jobs with ranking
+   Module for async execution of clients jobs with ranking
    Based on
    Copyright (C) 2011 Maciej Kaczkowski / keit.co
 
@@ -164,6 +164,25 @@ type
     property SleepTime : TJobToJobWait read GetSleepTime write SetSleepTime;
   end;
 
+  { TLinearList }
+
+  TLinearList = class
+  private
+    FPools : Array [0..7] of TThreadSafeFastSeq;
+    FWMarkerLoc, FRMarkerLoc : TAtomicInteger;
+    FTotalCount : TAtomicInteger;
+
+    function GetCount : Integer;
+  public
+    constructor Create;
+    destructor Destroy; override;
+
+    procedure Push(const aJob : TLinearJob);
+    function PopValue : TLinearJob;
+
+    property Count : Integer read GetCount;
+  end;
+
   { TSortedThreadPool }
 
   TSortedThreadPool = class
@@ -171,7 +190,7 @@ type
     FPool: TThreadSafeFastList;
     FSortedList: TAvgLvlTree;
     FSortedListLocker : TNetCustomLockedObject;
-    FLinearList : TThreadSafeFastSeq;
+    FLinearList : TLinearList;
     FSortedThreadsCount : TAtomicInteger;
     FLinearThreadsCount : TAtomicInteger;
     FThreadJobToJobWait : TThreadJobToJobWait;
@@ -232,6 +251,73 @@ const DefaultJobToJobWait : TJobToJobWait = (DefaultValue : SORTED_DEFAULT_SLEEP
                                              AdaptMax : 0);
 
 implementation
+
+{ TLinearList }
+
+function TLinearList.GetCount: Integer;
+begin
+  Result := FTotalCount.Value;
+end;
+
+constructor TLinearList.Create;
+var
+  i : integer;
+begin
+  for i := low(FPools) to high(FPools) do
+  begin
+    FPools[i] := TThreadSafeFastSeq.Create;
+  end;
+  FWMarkerLoc := TAtomicInteger.Create(low(FPools));
+  FRMarkerLoc := TAtomicInteger.Create(low(FPools));
+  FTotalCount := TAtomicInteger.Create(0);
+end;
+
+destructor TLinearList.Destroy;
+var
+  i : integer;
+begin
+  for i := low(FPools) to high(FPools) do
+  begin
+    FPools[i].Free;
+  end;
+  FWMarkerLoc.Free;
+  FRMarkerLoc.Free;
+  FTotalCount.Free;
+  inherited Destroy;
+end;
+
+procedure TLinearList.Push(const aJob: TLinearJob);
+var loc : Cardinal;
+begin
+  loc := FWMarkerLoc.Value;
+  inc(loc);
+  if loc > high(FPools) then loc := low(FPools);
+  FWMarkerLoc.Value:= loc;
+
+  FPools[loc].push_back(aJob);
+  FTotalCount.IncValue;
+end;
+
+function TLinearList.PopValue: TLinearJob;
+var loc, i, cur : Cardinal;
+begin
+  cur := FRMarkerLoc.Value;
+  loc := cur;
+  for i := low(FPools) to high(FPools) do
+  begin
+    if loc > high(FPools) then loc := low(FPools);
+
+    Result := TLinearJob(FPools[loc].PopValue);
+    if Assigned(Result) then
+    begin
+      FRMarkerLoc.Value := loc + 1;
+      FTotalCount.DecValue;
+      Exit;
+    end;
+    Inc(loc);
+  end;
+  Result := nil;
+end;
 
 { TWaitingCollection }
 
@@ -761,8 +847,10 @@ begin
     for i := 0 to FPool.Count - 1 do
     begin
       if (FPool[i] = aThread) then begin
-        if aThread.ThreadKind = ptkLinear then FLinearThreadsCount.DecValue else
-        if aThread.ThreadKind = ptkSorted then FSortedThreadsCount.DecValue;
+        case aThread.ThreadKind of
+          ptkLinear: FLinearThreadsCount.DecValue;
+          ptkSorted: FSortedThreadsCount.DecValue;
+        end;
         FPool[i] := nil;
       end;
     end;
@@ -788,7 +876,7 @@ begin
   FSortedList := TAvgLvlTree.CreateObjectCompare(OnCompareMethod);
   FSortedList.OwnsObjects:=false;
   FSortedListLocker := TNetCustomLockedObject.Create;
-  FLinearList := TThreadSafeFastSeq.Create;
+  FLinearList := TLinearList.Create;
   FSortedThreadsCount := TAtomicInteger.Create(aSortedThreads);
   FLinearThreadsCount := TAtomicInteger.Create(aLinearThreads);
   FThreadJobToJobWait := TThreadJobToJobWait.Create(DefaultJobToJobWait);
@@ -891,7 +979,7 @@ end;
 
 procedure TSortedThreadPool.AddLinear(AJob: TLinearJob);
 begin
-  FLinearList.Push_back(AJob);
+  FLinearList.Push(AJob);
   LinearJobSignal;
 end;
 
@@ -1003,8 +1091,8 @@ begin
     begin
       if WaitJob then
       begin
-        FSleepTime.AdaptToInc(FCurSleepTime);
         Sleep(FCurSleepTime);
+        FSleepTime.AdaptToInc(FCurSleepTime);
         Continue;
       end;
 

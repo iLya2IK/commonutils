@@ -121,6 +121,16 @@ type
     class function InterlockedNot(var A: Int32): Int32; overload; static; inline;
     class function InterlockedNot(var A: Cardinal): Cardinal; overload; static; inline;
     class function InterlockedNot(var A: LongBool): LongBool; overload; static; inline;
+    class function InterlockedShr(var A: QWord; Cnt : Integer): QWord; overload; static; inline;
+    class function InterlockedShr(var A: Int64; Cnt : Integer): Int64; overload; static; inline;
+    class function InterlockedShr(var A: Int32; Cnt : Integer): Int32; overload; static; inline;
+    class function InterlockedShr(var A: Cardinal; Cnt : Integer): Cardinal; overload; static; inline;
+    class function InterlockedShr(var A: LongBool; Cnt : Integer): LongBool; overload; static; inline;
+    class function InterlockedShl(var A: QWord; Cnt : Integer): QWord; overload; static; inline;
+    class function InterlockedShl(var A: Int64; Cnt : Integer): Int64; overload; static; inline;
+    class function InterlockedShl(var A: Int32; Cnt : Integer): Int32; overload; static; inline;
+    class function InterlockedShl(var A: Cardinal; Cnt : Integer): Cardinal; overload; static; inline;
+    class function InterlockedShl(var A: LongBool; Cnt : Integer): LongBool; overload; static; inline;
     {$endif}
   end;
 
@@ -194,6 +204,8 @@ type
     function AndValue(const aValue : T) : T;
     function OrValue(const aValue : T) : T;
     function XorValue(const aValue : T) : T;
+    function ShlValue(aCount : Integer) : T;
+    function ShrValue(aCount : Integer) : T;
     function NotValue() : T;
 
     procedure IncValue;
@@ -610,8 +622,10 @@ implementation
 {$ASMMODE Intel}
 {$IFDEF x64}
   {$DEFINE Ptr64}
-{$ELSE SizeOf(Pointer) <> 4}
+{$ELSE}
+  {$IF SizeOf(Pointer) <> 4 }
   {$MESSAGE FATAL 'Unsupported size of pointers.'}
+  {$ENDIF}
 {$ENDIF}
 
 {
@@ -1106,6 +1120,294 @@ end;
 
 //------------------------------------------------------------------------------
 
+Function InterlockedShr32(A: Pointer; B: Integer): UInt32;
+begin
+asm
+{$IFDEF x64}
+
+    @TryOutStart:
+
+          MOV ECX, B
+  {$IFDEF Windows}
+          MOV   EAX, dword ptr [RCX]
+  {$ELSE}
+          MOV   EAX, dword ptr [RDI]
+  {$ENDIF}
+
+          MOV   R8D, EAX
+          SHR   R8D, CL
+
+  {$IFDEF Windows}
+    LOCK  CMPXCHG dword ptr [RCX], R8D
+  {$ELSE}
+    LOCK  CMPXCHG dword ptr [RDI], R8D
+  {$ENDIF}
+
+          JNZ   @TryOutStart
+
+          MOV   EAX, R8D
+
+{$ELSE}// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+
+          PUSH  EBX
+
+          MOV   ECX, B
+          MOV   EDX, EAX
+
+    @TryOutStart:
+
+          MOV   EAX, dword ptr [EDX]
+
+          MOV   EBX, EAX
+          SHR   EBX, CL
+
+    LOCK  CMPXCHG dword ptr [EDX], EBX
+
+          JNZ   @TryOutStart
+
+          MOV   EAX, EBX
+
+          POP   EBX
+
+{$ENDIF}
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function InterlockedShr64(A: Pointer; B: Integer): UInt64;
+begin
+asm
+{$IFDEF x64}
+
+    @TryOutStart:
+
+          MOV   ECX, B
+  {$IFDEF Windows}
+          MOV   RAX, qword ptr [RCX]
+  {$ELSE}
+          MOV   RAX, qword ptr [RDI]
+  {$ENDIF}
+
+          MOV   R8, RAX
+          SHR   R8, CL
+
+  {$IFDEF Windows}
+    LOCK  CMPXCHG qword ptr [RCX], R8
+  {$ELSE}
+    LOCK  CMPXCHG qword ptr [RDI], R8
+  {$ENDIF}
+
+          JNZ   @TryOutStart
+
+          MOV   RAX, R8
+
+{$ELSE}// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+
+
+          PUSH  EBX
+          PUSH  EDI
+
+          MOV   EDI, EAX
+          MOV   ECX, B
+
+     @TryOutStart:
+
+          MOV   EAX, dword ptr [EDI]
+          MOV   EDX, dword ptr [EDI + 4]
+
+          PUSH EAX
+          PUSH EDX
+
+          CMP  CL, 64
+          JAE  @RETZERO
+
+          CMP  CL, 32
+          JAE  @MORE32
+
+          SHRD  EAX, EDX, CL
+          SHR   EDX, CL
+
+          JMP @OUTPOS
+
+    @MORE32:
+          MOV     EAX, EDX
+          SHR     EDX, 31
+          AND     CL,  31
+          SHR     EAX, CL
+
+          JMP @OUTPOS
+
+    @RETZERO:
+          XOR     EAX,EAX
+          XOR     EDX,EDX
+
+    @OUTPOS:
+          MOV EBX, EAX
+          MOV ECX, EDX
+
+          POP EDX
+          POP EAX
+
+    LOCK  CMPXCHG8B qword ptr [EDI]
+
+          JNZ   @TryOutStart
+          MOV   EAX, EBX
+          MOV   EDX, ECX
+
+          POP   EDI
+          POP   EBX
+
+{$ENDIF}
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function InterlockedShl32(A: Pointer; B: Integer): UInt32;
+begin
+asm
+{$IFDEF x64}
+
+    @TryOutStart:
+
+          MOV ECX, B
+  {$IFDEF Windows}
+          MOV   EAX, dword ptr [RCX]
+  {$ELSE}
+          MOV   EAX, dword ptr [RDI]
+  {$ENDIF}
+
+          MOV   R8D, EAX
+          SHL   R8D, CL
+
+  {$IFDEF Windows}
+    LOCK  CMPXCHG dword ptr [RCX], R8D
+  {$ELSE}
+    LOCK  CMPXCHG dword ptr [RDI], R8D
+  {$ENDIF}
+
+          JNZ   @TryOutStart
+
+          MOV   EAX, R8D
+
+{$ELSE}// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+
+          PUSH  EBX
+
+          MOV   ECX, B
+          MOV   EDX, EAX
+
+    @TryOutStart:
+
+          MOV   EAX, dword ptr [EDX]
+
+          MOV   EBX, EAX
+          SHL   EBX, CL
+
+    LOCK  CMPXCHG dword ptr [EDX], EBX
+
+          JNZ   @TryOutStart
+
+          MOV   EAX, EBX
+
+          POP   EBX
+
+{$ENDIF}
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function InterlockedShl64(A: Pointer; B: Integer): UInt64;
+begin
+asm
+{$IFDEF x64}
+
+    @TryOutStart:
+
+          MOV   ECX, B
+  {$IFDEF Windows}
+          MOV   RAX, qword ptr [RCX]
+  {$ELSE}
+          MOV   RAX, qword ptr [RDI]
+  {$ENDIF}
+
+          MOV   R8, RAX
+          SHL   R8, CL
+
+  {$IFDEF Windows}
+    LOCK  CMPXCHG qword ptr [RCX], R8
+  {$ELSE}
+    LOCK  CMPXCHG qword ptr [RDI], R8
+  {$ENDIF}
+
+          JNZ   @TryOutStart
+
+          MOV   RAX, R8
+
+{$ELSE}// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+
+          PUSH  EBX
+          PUSH  EDI
+
+          MOV   EDI, EAX
+          MOV   ECX, B
+
+     @TryOutStart:
+
+          MOV   EAX, dword ptr [EDI]
+          MOV   EDX, dword ptr [EDI + 4]
+
+          PUSH EAX
+          PUSH EDX
+
+          CMP  CL,64
+          JAE  @RETZERO
+
+          CMP  CL, 32
+          JAE  @MORE32
+
+          SHLD  EDX, EAX, CL
+          SHL   EAX, CL
+
+          JMP @OUTPOS
+
+    @MORE32:
+          MOV     EDX, EAX
+          XOR     EAX,EAX
+          AND     CL,  31
+          SHL     EDX, CL
+
+          JMP @OUTPOS
+
+    @RETZERO:
+          XOR     EAX,EAX
+          XOR     EDX,EDX
+
+    @OUTPOS:
+          MOV EBX, EAX
+          MOV ECX, EDX
+
+          POP EDX
+          POP EAX
+
+    LOCK  CMPXCHG8B qword ptr [EDI]
+
+          JNZ   @TryOutStart
+          MOV   EAX, EBX
+          MOV   EDX, ECX
+
+          POP   EDI
+          POP   EBX
+
+{$ENDIF}
+end;
+end;
+
+
+//------------------------------------------------------------------------------
+
 Function InterlockedNot32(I: Pointer): UInt32;
 begin
 asm
@@ -1212,6 +1514,157 @@ asm
 {$ENDIF}
 end;
 end;
+
+{$ifndef x64}
+
+//------------------------------------------------------------------------------
+
+Function InterlockedIncrement64(I: Pointer): UInt64;
+begin
+asm
+    PUSH  EBX
+    PUSH  EDI
+
+    MOV   EDI, EAX
+
+    @TryOutStart:
+
+    MOV   EAX, dword ptr [EDI]
+    MOV   EDX, dword ptr [EDI + 4]
+
+    MOV   EBX, EAX
+    MOV   ECX, EDX
+
+    ADD   EBX, 1
+    ADC   ECX, 0
+
+    LOCK  CMPXCHG8B qword ptr [EDI]
+
+    JNZ   @TryOutStart
+
+    MOV   EAX, EBX
+    MOV   EDX, ECX
+
+    POP   EDI
+    POP   EBX
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function InterlockedDecrement64(I: Pointer): UInt64;
+begin
+asm
+          PUSH  EBX
+          PUSH  EDI
+
+          MOV   EDI, EAX
+
+    @TryOutStart:
+
+          MOV   EAX, dword ptr [EDI]
+          MOV   EDX, dword ptr [EDI + 4]
+
+          MOV   EBX, EAX
+          MOV   ECX, EDX
+
+          SUB   EBX, 1
+          SBB   ECX, 0
+
+    LOCK  CMPXCHG8B qword ptr [EDI]
+
+          JNZ   @TryOutStart
+
+          MOV   EAX, EBX
+          MOV   EDX, ECX
+
+          POP   EDI
+          POP   EBX
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function InterlockedExchangeAdd64(I: Pointer; B: UInt64): UInt64;
+begin
+asm
+          PUSH  EBX
+          PUSH  EDI
+
+          MOV   EDI, EAX
+
+    @TryOutStart:
+
+          MOV   EBX, dword ptr [B]
+          MOV   ECX, dword ptr [B + 4]
+
+          MOV   EAX, dword ptr [EDI]
+          MOV   EDX, dword ptr [EDI + 4]
+
+          ADD   EBX, EAX
+          ADC   ECX, EDX
+
+    LOCK  CMPXCHG8B qword ptr [EDI]
+
+          JNZ   @TryOutStart
+
+          POP   EDI
+          POP   EBX
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function InterlockedExchange64(I: Pointer; B: UInt64): UInt64;
+begin
+asm
+          PUSH  EBX
+          PUSH  EDI
+
+          MOV   EDI, EAX
+
+    @TryOutStart:
+
+          MOV   EBX, dword ptr [B]
+          MOV   ECX, dword ptr [B + 4]
+
+          MOV   EAX, dword ptr [EDI]
+          MOV   EDX, dword ptr [EDI + 4]
+
+    LOCK  CMPXCHG8B qword ptr [EDI]
+
+          JNZ   @TryOutStart
+
+          POP   EDI
+          POP   EBX
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function InterlockedCompareExchange64(I: Pointer; Exchange,
+                                   Comparand: UInt64): UInt64;
+begin
+asm
+    PUSH  EBX
+    PUSH  EDI
+
+    MOV   EDI, EAX
+
+    MOV   EAX, dword ptr [Comparand]
+    MOV   EDX, dword ptr [Comparand + 4]
+
+    MOV   EBX, dword ptr [Exchange]
+    MOV   ECX, dword ptr [Exchange + 4]
+
+    LOCK  CMPXCHG8B qword ptr [EDI]
+
+    POP   EDI
+    POP   EBX
+end;
+end;
+
+{$endif}
 
 {$endif}
 
@@ -1415,6 +1868,60 @@ begin
   Lock;
   try
     FValue := FValue xor aValue;
+    Result := FValue;
+  finally
+    UnLock;
+  end;
+  {$ifend}
+end;
+
+function TAtomicNumeric.ShlValue(aCount: Integer): T;
+begin
+  {$if defined(AtomicAsRW)}
+  BeginWrite;
+  try
+    FValue := FValue shl aCount;
+    Result := FValue;
+  finally
+    EndWrite;
+  end;
+  {$elseif defined(AtomicAsInterlocked)}
+  {$ifdef USELIBINTERLOCKEDOPS}
+  Result := InterlockedShl(FValue, aCount);
+  {$else}
+  Result := Exchange(FValue, CompareExchange(FValue, 0,0) shl aCount);
+  {$endif}
+  {$else}
+  Lock;
+  try
+    FValue := FValue shl aCount;
+    Result := FValue;
+  finally
+    UnLock;
+  end;
+  {$ifend}
+end;
+
+function TAtomicNumeric.ShrValue(aCount: Integer): T;
+begin
+  {$if defined(AtomicAsRW)}
+  BeginWrite;
+  try
+    FValue := FValue shr aCount;
+    Result := FValue;
+  finally
+    EndWrite;
+  end;
+  {$elseif defined(AtomicAsInterlocked)}
+  {$ifdef USELIBINTERLOCKEDOPS}
+  Result := InterlockedShr(FValue, aCount);
+  {$else}
+  Result := Exchange(FValue, CompareExchange(FValue, 0,0) shr aCount);
+  {$endif}
+  {$else}
+  Lock;
+  try
+    FValue := FValue shr aCount;
     Result := FValue;
   finally
     UnLock;
@@ -1648,6 +2155,66 @@ begin
   Result := LongBool(InterlockedNot32(@A));
 end;
 
+class function TNetInterlocked.InterlockedShr(var A: QWord; Cnt: Integer
+  ): QWord;
+begin
+  Result := QWord(InterlockedShr64(@A, Cnt));
+end;
+
+class function TNetInterlocked.InterlockedShr(var A: Int64; Cnt: Integer
+  ): Int64;
+begin
+  Result := Int64(InterlockedShr64(@A, Cnt));
+end;
+
+class function TNetInterlocked.InterlockedShr(var A: Int32; Cnt: Integer
+  ): Int32;
+begin
+  Result := Int32(InterlockedShr32(@A, Cnt));
+end;
+
+class function TNetInterlocked.InterlockedShr(var A: Cardinal; Cnt: Integer
+  ): Cardinal;
+begin
+  Result := Cardinal(InterlockedShr32(@A, Cnt));
+end;
+
+class function TNetInterlocked.InterlockedShr(var A: LongBool; {%H-}Cnt: Integer
+  ): LongBool;
+begin
+  Result := InterlockedStoreBool(@A, False);
+end;
+
+class function TNetInterlocked.InterlockedShl(var A: QWord; Cnt: Integer
+  ): QWord;
+begin
+  Result := QWord(InterlockedShl64(@A, Cnt));
+end;
+
+class function TNetInterlocked.InterlockedShl(var A: Int64; Cnt: Integer
+  ): Int64;
+begin
+  Result := Int64(InterlockedShl64(@A, Cnt));
+end;
+
+class function TNetInterlocked.InterlockedShl(var A: Int32; Cnt: Integer
+  ): Int32;
+begin
+  Result := Int32(InterlockedShl32(@A, Cnt));
+end;
+
+class function TNetInterlocked.InterlockedShl(var A: Cardinal; Cnt: Integer
+  ): Cardinal;
+begin
+  Result := Cardinal(InterlockedShl32(@A, Cnt));
+end;
+
+class function TNetInterlocked.InterlockedShl(var A: LongBool; {%H-}Cnt: Integer
+  ): LongBool;
+begin
+  Result := InterlockedStoreBool(@A, False);
+end;
+
 class function TNetInterlocked.Increment(var Destination: Int32): Int32;
 begin
   result:=InterlockedIncrement(Destination);
@@ -1660,12 +2227,28 @@ end;
 
 class function TNetInterlocked.Increment(var Destination: Int64): Int64;
 begin
+  {$ifdef x64}
   result:=InterlockedIncrement64(Destination);
+  {$else}
+  {$ifdef USELIBINTERLOCKEDOPS}
+  result:=InterlockedIncrement64(@Destination);
+  {$else}
+  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$endif}
+  {$endif}
 end;
 
 class function TNetInterlocked.Increment(var Destination: UInt64): UInt64;
 begin
+  {$ifdef x64}
   result:=InterlockedIncrement64(Destination);
+  {$else}
+  {$ifdef USELIBINTERLOCKEDOPS}
+  result:=InterlockedIncrement64(@Destination);
+  {$else}
+  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$endif}
+  {$endif}
 end;
 
 class function TNetInterlocked.Decrement(var Destination: Int32): Int32;
@@ -1680,12 +2263,28 @@ end;
 
 class function TNetInterlocked.Decrement(var Destination: Int64): Int64;
 begin
+  {$ifdef x64}
   result:=InterlockedDecrement64(Destination);
+  {$else}
+  {$ifdef USELIBINTERLOCKEDOPS}
+  result:=InterlockedDecrement64(@Destination);
+  {$else}
+  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$endif}
+  {$endif}
 end;
 
 class function TNetInterlocked.Decrement(var Destination: UInt64): UInt64;
 begin
+  {$ifdef x64}
   result:=InterlockedDecrement64(Destination);
+  {$else}
+  {$ifdef USELIBINTERLOCKEDOPS}
+  result:=InterlockedDecrement64(@Destination);
+  {$else}
+  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$endif}
+  {$endif}
 end;
 
 class function TNetInterlocked.Add(var Destination: Int32;
@@ -1703,13 +2302,29 @@ end;
 class function TNetInterlocked.Add(var Destination: Int64; const Value: Int64
   ): Int64;
 begin
+  {$ifdef x64}
   result:=InterlockedExchangeAdd64(Destination,Value);
+  {$else}
+  {$ifdef USELIBINTERLOCKEDOPS}
+  result:=InterlockedExchangeAdd64(@Destination, Value);
+  {$else}
+  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$endif}
+  {$endif}
 end;
 
 class function TNetInterlocked.Add(var Destination: UInt64; const Value: UInt64
   ): UInt64;
 begin
+  {$ifdef x64}
   result:=InterlockedExchangeAdd64(Destination,Value);
+  {$else}
+  {$ifdef USELIBINTERLOCKEDOPS}
+  result:=InterlockedExchangeAdd64(@Destination, Value);
+  {$else}
+  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$endif}
+  {$endif}
 end;
 
 class function TNetInterlocked.Sub(var Destination: Int32;
@@ -1727,13 +2342,29 @@ end;
 class function TNetInterlocked.Sub(var Destination: Int64; const Value: Int64
   ): Int64;
 begin
+  {$ifdef x64}
   result:=InterlockedExchangeAdd64(Destination,-Value);
+  {$else}
+  {$ifdef USELIBINTERLOCKEDOPS}
+  result:=InterlockedExchangeAdd64(@Destination,-Value);
+  {$else}
+  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$endif}
+  {$endif}
 end;
 
 class function TNetInterlocked.Sub(var Destination: UInt64; const Value: UInt64
   ): UInt64;
 begin
+  {$ifdef x64}
   result:=UInt64(Int64(InterlockedExchangeAdd64(Destination,-Int64(Value))));
+  {$else}
+  {$ifdef USELIBINTERLOCKEDOPS}
+  result:=UInt64(Int64(InterlockedExchangeAdd64(@Destination,-Int64(Value))));
+  {$else}
+  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$endif}
+  {$endif}
 end;
 
 class function TNetInterlocked.Exchange(var Destination: Int32;
@@ -1751,13 +2382,29 @@ end;
 class function TNetInterlocked.Exchange(var Destination: Int64;
   const Source: Int64): Int64;
 begin
+  {$ifdef x64}
   result:=InterlockedExchange64(Destination,Source);
+  {$else}
+  {$ifdef USELIBINTERLOCKEDOPS}
+  result:=InterlockedExchange64(@Destination,Source);
+  {$else}
+  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$endif}
+  {$endif}
 end;
 
 class function TNetInterlocked.Exchange(var Destination: UInt64;
   const Source: UInt64): UInt64;
 begin
+  {$ifdef x64}
   result:=InterlockedExchange64(Destination,Source);
+  {$else}
+  {$ifdef USELIBINTERLOCKEDOPS}
+  result:=InterlockedExchange64(@Destination,Source);
+  {$else}
+  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$endif}
+  {$endif}
 end;
 
 class function TNetInterlocked.Exchange(var Destination: pointer;
@@ -1793,13 +2440,29 @@ end;
 class function TNetInterlocked.CompareExchange(var Destination: Int64;
   const NewValue, Comperand: Int64): Int64;
 begin
+  {$ifdef x64}
   result:=InterlockedCompareExchange64(Destination,NewValue,Comperand);
+  {$else}
+  {$ifdef USELIBINTERLOCKEDOPS}
+  result:=InterlockedCompareExchange64(@Destination,NewValue,Comperand);
+  {$else}
+  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$endif}
+  {$endif}
 end;
 
 class function TNetInterlocked.CompareExchange(var Destination: UInt64;
   const NewValue, Comperand: UInt64): UInt64;
 begin
+  {$ifdef x64}
   result:=InterlockedCompareExchange64(Destination,NewValue,Comperand);
+  {$else}
+  {$ifdef USELIBINTERLOCKEDOPS}
+  result:=InterlockedCompareExchange64(@Destination,NewValue,Comperand);
+  {$else}
+  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$endif}
+  {$endif}
 end;
 
 class function TNetInterlocked.CompareExchange(var Destination: pointer;
