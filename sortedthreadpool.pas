@@ -168,17 +168,39 @@ type
 
   TLinearList = class
   private
-    FPools : Array [0..7] of TThreadSafeFastSeq;
+    FPools : Array of TThreadSafeFastSeq;
     FWMarkerLoc, FRMarkerLoc : TAtomicInteger;
     FTotalCount : TAtomicInteger;
 
     function GetCount : Integer;
   public
-    constructor Create;
+    constructor Create(aPoolCount : Integer);
     destructor Destroy; override;
 
     procedure Push(const aJob : TLinearJob);
     function PopValue : TLinearJob;
+
+    property Count : Integer read GetCount;
+  end;
+
+  TOnSortedListDefineLevel = function (const aJob : TSortedJob) : Integer of object;
+
+  { TSortedList }
+
+  TSortedList = class
+  private
+    FLevels : Array of TLinearList; // priority
+    FTotalCount : TAtomicInteger;
+    FOnLevelDefine : TOnSortedListDefineLevel;
+
+    function GetCount : Integer;
+  public
+    constructor Create(aLevelCount : Integer;
+                       aOnLevelDefine : TOnSortedListDefineLevel);
+    destructor Destroy; override;
+
+    procedure AddJob(const aJob : TSortedJob);
+    function GetJob : TSortedJob;
 
     property Count : Integer read GetCount;
   end;
@@ -188,8 +210,7 @@ type
   TSortedThreadPool = class
   private
     FPool: TThreadSafeFastList;
-    FSortedList: TAvgLvlTree;
-    FSortedListLocker : TNetCustomLockedObject;
+    FSortedList: TSortedList;
     FLinearList : TLinearList;
     FSortedThreadsCount : TAtomicInteger;
     FLinearThreadsCount : TAtomicInteger;
@@ -222,7 +243,8 @@ type
     procedure SetThreadJobToJobWait(AValue: TJobToJobWait);
     procedure AddWaitedJob(AJob : TLinearJob; aDelta : Cardinal);
   public
-    constructor Create(const OnCompareMethod: TAvgLvlObjectSortCompare;
+    constructor Create( aSortedLevelCnt : Integer;
+                        const OnCompareMethod: TOnSortedListDefineLevel;
                                aSleepTime : TJobToJobWait;
                                aSortedThreads: Integer = 5;
                                aLinearThreads: Integer = 5);
@@ -252,6 +274,67 @@ const DefaultJobToJobWait : TJobToJobWait = (DefaultValue : SORTED_DEFAULT_SLEEP
 
 implementation
 
+{ TSortedList }
+
+function TSortedList.GetCount: Integer;
+begin
+  Result := FTotalCount.Value;
+end;
+
+constructor TSortedList.Create(aLevelCount: Integer;
+  aOnLevelDefine: TOnSortedListDefineLevel);
+var
+  i : integer;
+begin
+  FTotalCount := TAtomicInteger.Create(0);
+  FOnLevelDefine:= aOnLevelDefine;
+
+  if aLevelCount < 1 then aLevelCount := 1;
+  SetLength(FLevels, aLevelCount);
+
+  for i := 0 to aLevelCount-1 do
+  begin
+    FLevels[i] := TLinearList.Create(aLevelCount - i);
+  end;
+end;
+
+destructor TSortedList.Destroy;
+var
+  i : integer;
+begin
+  for i := 0 to High(FLevels) do
+  begin
+    FLevels[i].Free;
+  end;
+  FTotalCount.Free;
+  inherited Destroy;
+end;
+
+procedure TSortedList.AddJob(const aJob: TSortedJob);
+var
+  l : integer;
+begin
+  l := FOnLevelDefine(aJob);
+  FLevels[l].Push(aJob);
+  FTotalCount.IncValue;
+end;
+
+function TSortedList.GetJob: TSortedJob;
+var
+  i : integer;
+begin
+  if Count = 0 then Exit(nil);
+  for i := 0 to High(FLevels) do
+  begin
+    Result := TSortedJob(FLevels[i].PopValue);
+    if Assigned(Result) then begin
+      FTotalCount.DecValue;
+      Exit;
+    end;
+  end;
+  Result := nil;
+end;
+
 { TLinearList }
 
 function TLinearList.GetCount: Integer;
@@ -259,10 +342,12 @@ begin
   Result := FTotalCount.Value;
 end;
 
-constructor TLinearList.Create;
+constructor TLinearList.Create(aPoolCount: Integer);
 var
   i : integer;
 begin
+  if aPoolCount < 1 then aPoolCount := 1;
+  SetLength(FPools, aPoolCount);
   for i := low(FPools) to high(FPools) do
   begin
     FPools[i] := TThreadSafeFastSeq.Create;
@@ -301,6 +386,8 @@ end;
 function TLinearList.PopValue: TLinearJob;
 var loc, i, cur : Cardinal;
 begin
+  if Count = 0 then Exit(nil);
+
   cur := FRMarkerLoc.Value;
   loc := cur;
   for i := low(FPools) to high(FPools) do
@@ -655,20 +742,11 @@ end;
 { TSortedThreadPool }
 
 function TSortedThreadPool.GetSortedJob : TSortedJob;
-var JN : TAvgLvlTreeNode;
 begin
-  FSortedListLocker.Lock;
-  try
-    if FSortedList.Count > 0 then
-    begin
-      JN := FSortedList.FindLowest;
-      Result := TSortedJob(JN.Data);
-      if assigned(JN) then
-        FSortedList.Delete(JN);
-    end else Result := nil;
-  finally
-    FSortedListLocker.UnLock;
-  end;
+  if FSortedList.Count > 0 then
+  begin
+    Result := FSortedList.GetJob;
+  end else Result := nil;
 end;
 
 function TSortedThreadPool.GetLinearJob : TLinearJob;
@@ -678,12 +756,7 @@ end;
 
 function TSortedThreadPool.GetSortedJobsCount: Integer;
 begin
-  FSortedListLocker.Lock;
-  try
-    Result := FSortedList.Count;
-  finally
-    FSortedListLocker.UnLock;
-  end;
+  Result := FSortedList.Count;
 end;
 
 function TSortedThreadPool.GetSortedThreadsCount: integer;
@@ -860,7 +933,8 @@ begin
 end;
 
 constructor TSortedThreadPool.Create(
-  const OnCompareMethod: TAvgLvlObjectSortCompare;
+  aSortedLevelCnt : Integer;
+  const OnCompareMethod: TOnSortedListDefineLevel;
   aSleepTime: TJobToJobWait;
   aSortedThreads: Integer;
   aLinearThreads: Integer);
@@ -873,10 +947,8 @@ begin
   FPool:= TThreadSafeFastList.Create;
   FWaitedJobs := TWaitingPool.Create;
   FWaitedJobs.OnReborn := @DoOnRebornJob;
-  FSortedList := TAvgLvlTree.CreateObjectCompare(OnCompareMethod);
-  FSortedList.OwnsObjects:=false;
-  FSortedListLocker := TNetCustomLockedObject.Create;
-  FLinearList := TLinearList.Create;
+  FSortedList := TSortedList.Create(aSortedLevelCnt, OnCompareMethod);
+  FLinearList := TLinearList.Create(8);
   FSortedThreadsCount := TAtomicInteger.Create(aSortedThreads);
   FLinearThreadsCount := TAtomicInteger.Create(aLinearThreads);
   FThreadJobToJobWait := TThreadJobToJobWait.Create(DefaultJobToJobWait);
@@ -952,12 +1024,9 @@ begin
   RTLEventDestroy(FSortedEvent);
   FPool.Free;
 
-  FSortedList.OwnsObjects:=true;
   FSortedList.Free;
-
   FLinearList.Free;
 
-  FSortedListLocker.Free;
   FRunning.Free;
   FLinearThreadsCount.Free;
   FSortedThreadsCount.Free;
@@ -968,12 +1037,7 @@ end;
 
 procedure TSortedThreadPool.AddSorted(AJob: TSortedJob);
 begin
-  FSortedListLocker.Lock;
-  try
-    FSortedList.Add(AJob);
-  finally
-    FSortedListLocker.UnLock;
-  end;
+  FSortedList.AddJob(AJob);
   SortedJobSignal;
 end;
 
