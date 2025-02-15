@@ -226,10 +226,23 @@ type
     constructor Create;
     destructor Destroy; override;
     procedure IncReference;
-    procedure DecReference;
+    procedure DecReference; virtual;
     function HasReferences : Boolean;
     function HasExternReferences : Boolean;
     function NoReferences: Boolean;
+  end;
+
+  TNetAutoRefRemoved = procedure (obj : TNetReferencedObject) of object;
+
+  { TNetAutoReferencedObject }
+
+  TNetAutoReferencedObject = class(TNetReferencedObject)
+  private
+    FOnRemove : TNetAutoRefRemoved;
+  public
+    procedure DecReference; override;
+
+    property OnRemove : TNetAutoRefRemoved read FOnRemove write FOnRemove;
   end;
 
   TNetReferenceOnDisconnect = procedure (v : TNetReferencedObject) of object;
@@ -583,6 +596,22 @@ type
     property OnChange : TNotifyEvent read GetOnChange write SetOnChange;
   end;
 
+  { TNetAutoReferenceList }
+
+  TNetAutoReferenceList = class
+  private
+    FRefCnt : TAtomicInteger;
+    function GetCount : Integer;
+    procedure UnRegister(v : TNetReferencedObject);
+  public
+    constructor Create;
+    destructor Destroy; override;
+    procedure Add(const O : TNetAutoReferencedObject);
+    procedure CleanDead;
+
+    property Count : Integer read GetCount;
+  end;
+
   { TNetReferenceList }
 
   TNetReferenceList = class(TThreadSafeFastSeq)
@@ -596,7 +625,7 @@ type
 
   { TReferencedStream }
 
-  TReferencedStream = class(TNetReferencedObject)
+  TReferencedStream = class(TNetAutoReferencedObject)
   private
     FStream : TStream;
   public
@@ -2774,6 +2803,40 @@ begin
   DoChange;
 end;
 
+{ TNetAutoReferenceList }
+
+function TNetAutoReferenceList.GetCount : Integer;
+begin
+  Result := FRefCnt.Value;
+end;
+
+procedure TNetAutoReferenceList.UnRegister(v : TNetReferencedObject);
+begin
+  FRefCnt.DecValue;
+end;
+
+constructor TNetAutoReferenceList.Create;
+begin
+  FRefCnt := TAtomicInteger.Create(0);
+end;
+
+destructor TNetAutoReferenceList.Destroy;
+begin
+  FRefCnt.Free;
+  inherited Destroy;
+end;
+
+procedure TNetAutoReferenceList.Add(const O : TNetAutoReferencedObject);
+begin
+  FRefCnt.IncValue;
+  O.OnRemove := @(Self.UnRegister);
+end;
+
+procedure TNetAutoReferenceList.CleanDead;
+begin
+  // Do nothing
+end;
+
 { TThreadActiveNumeric }
 
 procedure TThreadActiveNumeric.DoOnChange;
@@ -3799,6 +3862,20 @@ end;
 function TNetReferencedObject.NoReferences: Boolean;
 begin
   Result := mReferenceCount.Value <= 0;
+end;
+
+{ TNetAutoReferencedObject }
+
+procedure TNetAutoReferencedObject.DecReference;
+begin
+  inherited DecReference;
+
+  if not HasReferences then
+  begin
+    if Assigned(FOnRemove) then
+       FOnRemove(Self);
+    Self.Free;
+  end;
 end;
 
 { TNetCustomLockedObject }
