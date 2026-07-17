@@ -2,7 +2,7 @@
 <CONFIG>
   <Package Version="5">
     <Name Value="commonutils_ilya2ik"/>
-    <Author Value="Copyright (c) 2019-2021, Ilya Medvedkov"/>
+    <Author Value="Copyright (c) 2019-2026, Ilya Medvedkov"/>
     <CompilerOptions>
       <Version Value="11"/>
       <SearchPaths>
@@ -11,11 +11,17 @@
       </SearchPaths>
       <Other>
         <CustomOptions Value="-dALLOW_STREAM_GZIP"/>
+        <OtherDefines Count="4">
+          <Define0 Value="ALLOW_STREAM_GZIP"/>
+          <Define1 Value="AtomicAsCS"/>
+          <Define2 Value="UseRWLocks"/>
+          <Define3 Value="AtomicAsRW"/>
+        </OtherDefines>
       </Other>
     </CompilerOptions>
     <Description Value="Set of Free Pascal units, used in several projects"/>
     <License Value="LGPL v2"/>
-    <Version Major="1" Release="12" Build="1"/>
+    <Version Major="1" Release="14" Build="1"/>
     <Files Count="26">
       <Item1>
         <Filename Value="bufferedstream.pas"/>
@@ -107,7 +113,7 @@
       </Item22>
       <Item23>
         <Filename Value="extsqlite3/extsqlite3hashfuncs.pas"/>
-        <UnitName Value="extsqlite3funcs"/>
+        <UnitName Value="ExtSqlite3HashFuncs"/>
       </Item23>
       <Item24>
         <Filename Value="oglsha2.pas"/>

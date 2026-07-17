@@ -2,9 +2,43 @@
  ECommonObjs:
    Thread safe helpers to access to objects and data
 
-   Part of ESolver project
+   Part of ESolver project.
+   To configure this module use compiler directives.
+   Define necessary directives in 
+   "Package commonutils > Package Options >
+    Compiler Options > Custom Options > Defines":
+   
+    AtomicAsCS - is the most multi-platform solution. 
+                 it works on all processors. 
+                 If the directive is defined, lock-objects 
+                 uses a critical section to protect a shared
+                 resource.
+                 If the directive is not defined, lock-objects 
+                 implemented as interlocked operations - faster
+                 but it depends on the platform.
+                 --opt="-dAtomicAsCS" 
+                 
+    UseRWLocks - switches the platform-dependent 
+                 "read-write (reader-writer) lock"-objects only for
+                 Windows and Linux pthreads.
+                 This parameter allows you to use the 
+                 'TNetRWVariable' class.   
+                 --opt="-dUseRWLocks".
+                 
+    AtomicAsRW - if defined, all atomic primitives are RW locks. 
+                 The solution depends on the platform. 
+                 In general, it is not recommended.
+                 When enabled, the "UseRWLocks" directive 
+                 also turns on automatically but 
+                 "AtomicAsCS" turns off.
+                 --opt="-dAtomicAsRW"                    
+       
+   By default AtomicAsCS, UseRWLocks, AtomicAsRW are switched off.
+   So by default module uses interlocked operations and the module 
+   can be compiled for all CPUs with alignment warnings for non-ARM, 
+   non-Intel(AMD) and 32-bit CPUs.
 
-   Copyright (c) 2019-2024 by Ilya Medvedkov
+   Copyright (c) 2019-2026 by Ilya Medvedkov
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -15,20 +49,28 @@ unit ECommonObjs;
 
 {$mode objfpc}{$H+}
 
-{.$define AtomicAsRW}
+{$ifndef AtomicAsCS}
 {$define AtomicAsInterlocked}
 {$define UseLibInterlockedOps}
-{.$define AtomicAsCS}
-{$ifdef AtomicAsRW}
-{$define userwlocks}
 {$else}
-{.$define userwlocks}
+{$undef AtomicAsInterlocked}
+{$undef UseLibInterlockedOps}
+{$endif}
+
+{$ifdef AtomicAsRW}
+{$define UseRWLocks}
 {$endif}
 
 {$IF defined(CPUX86_64) or defined(CPUX64)}
   {$DEFINE x64}
 {$ELSEIF defined(CPU386)}
   {$DEFINE x86}
+{$ELSEIF defined(CPUAARCH64)}
+  {$DEFINE armx64}
+  {$undef UseLibInterlockedOps}
+{$ELSEIF defined(CPUARM)}
+  {$DEFINE armx32}  
+  {$undef UseLibInterlockedOps}
 {$ELSE}
   {$undef UseLibInterlockedOps}
 {$IFEND}
@@ -37,7 +79,7 @@ interface
 
 uses
   Classes, SysUtils, OGLFastList, extmemorystream
-  {$ifdef userwlocks}
+  {$ifdef UseRWLocks}
   {$ifdef Windows}
   ,Windows
   {$else}
@@ -146,7 +188,7 @@ type
     procedure UnLock;
   end;
 
-  {$ifdef userwlocks}
+  {$ifdef UseRWLocks}
 
   { TNetRWVariable }
 
@@ -646,10 +688,12 @@ type
 
 implementation
 
-{$ifdef USELIBINTERLOCKEDOPS}
+{$ifdef UseLibInterlockedOps}
+
+{ UseLibInterlockedOps mode supported only by x86, x86_64 CPUs }
 
 {$ASMMODE Intel}
-{$IFDEF x64}
+{$IF DEFINED(x64)}
   {$DEFINE Ptr64}
 {$ELSE}
   {$IF SizeOf(Pointer) <> 4 }
@@ -1697,7 +1741,7 @@ end;
 
 {$endif}
 
-{$ifdef userwlocks}
+{$ifdef UseRWLocks}
 
 {$if defined(Windows)}
 procedure InitializeSRWLock(SRWLock:PPasMPSRWLock); stdcall; external 'kernel32.dll' name 'InitializeSRWLock';
@@ -1834,7 +1878,7 @@ begin
     EndWrite;
   end;
   {$elseif defined(AtomicAsInterlocked)}
-  {$ifdef USELIBINTERLOCKEDOPS}
+  {$ifdef UseLibInterlockedOps}
   Result := InterlockedAnd(FValue, ST(aValue));
   {$else}
   Result := Exchange(FValue, CompareExchange(FValue, 0,0) and aValue);
@@ -1861,7 +1905,7 @@ begin
     EndWrite;
   end;
   {$elseif defined(AtomicAsInterlocked)}
-  {$ifdef USELIBINTERLOCKEDOPS}
+  {$ifdef UseLibInterlockedOps}
   Result := InterlockedOr(FValue, ST(aValue));
   {$else}
   Result := Exchange(FValue, CompareExchange(FValue, 0,0) or aValue);
@@ -1888,7 +1932,7 @@ begin
     EndWrite;
   end;
   {$elseif defined(AtomicAsInterlocked)}
-  {$ifdef USELIBINTERLOCKEDOPS}
+  {$ifdef UseLibInterlockedOps}
   Result := InterlockedXor(FValue, ST(aValue));
   {$else}
   Result := Exchange(FValue, CompareExchange(FValue, 0,0) xor aValue);
@@ -1915,7 +1959,7 @@ begin
     EndWrite;
   end;
   {$elseif defined(AtomicAsInterlocked)}
-  {$ifdef USELIBINTERLOCKEDOPS}
+  {$ifdef UseLibInterlockedOps}
   Result := InterlockedShl(FValue, aCount);
   {$else}
   Result := Exchange(FValue, CompareExchange(FValue, 0,0) shl aCount);
@@ -1942,7 +1986,7 @@ begin
     EndWrite;
   end;
   {$elseif defined(AtomicAsInterlocked)}
-  {$ifdef USELIBINTERLOCKEDOPS}
+  {$ifdef UseLibInterlockedOps}
   Result := InterlockedShr(FValue, aCount);
   {$else}
   Result := Exchange(FValue, CompareExchange(FValue, 0,0) shr aCount);
@@ -1969,7 +2013,7 @@ begin
     EndWrite;
   end;
   {$elseif defined(AtomicAsInterlocked)}
-  {$ifdef USELIBINTERLOCKEDOPS}
+  {$ifdef UseLibInterlockedOps}
   Result := InterlockedNot(FValue);
   {$else}
   Result := Exchange(FValue, not CompareExchange(FValue, 0,0));
@@ -2078,6 +2122,8 @@ begin
 end;
 
 { TNetInterlocked }
+
+{$ifdef UseLibInterlockedOps}
 
 class function TNetInterlocked.InterlockedAnd(var A: QWord; B: QWord): QWord;
 begin
@@ -2244,6 +2290,8 @@ begin
   Result := InterlockedStoreBool(@A, False);
 end;
 
+{$endif} // end of {$ifdef UseLibInterlockedOps}
+
 class function TNetInterlocked.Increment(var Destination: Int32): Int32;
 begin
   result:=InterlockedIncrement(Destination);
@@ -2256,26 +2304,28 @@ end;
 
 class function TNetInterlocked.Increment(var Destination: Int64): Int64;
 begin
-  {$ifdef x64}
+  {$if defined(x64) or defined(armx64)}
   result:=InterlockedIncrement64(Destination);
   {$else}
-  {$ifdef USELIBINTERLOCKEDOPS}
+  {$ifdef UseLibInterlockedOps}
   result:=InterlockedIncrement64(@Destination);
   {$else}
-  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$MESSAGE WARNING 'Unsupported processor. Possible alignment exception.'}
+  result:=InterlockedIncrement64(Destination);
   {$endif}
   {$endif}
 end;
 
 class function TNetInterlocked.Increment(var Destination: UInt64): UInt64;
 begin
-  {$ifdef x64}
+  {$if defined(x64) or defined(armx64)}
   result:=InterlockedIncrement64(Destination);
   {$else}
-  {$ifdef USELIBINTERLOCKEDOPS}
+  {$ifdef UseLibInterlockedOps}
   result:=InterlockedIncrement64(@Destination);
   {$else}
-  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$MESSAGE WARNING 'Unsupported processor. Possible alignment exception.'}
+  result:=InterlockedIncrement64(Destination);
   {$endif}
   {$endif}
 end;
@@ -2292,26 +2342,28 @@ end;
 
 class function TNetInterlocked.Decrement(var Destination: Int64): Int64;
 begin
-  {$ifdef x64}
+  {$if defined(x64) or defined(armx64)}
   result:=InterlockedDecrement64(Destination);
   {$else}
-  {$ifdef USELIBINTERLOCKEDOPS}
+  {$ifdef UseLibInterlockedOps}
   result:=InterlockedDecrement64(@Destination);
   {$else}
-  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$MESSAGE WARNING 'Unsupported processor. Possible alignment exception.'}
+  result:=InterlockedDecrement64(Destination);
   {$endif}
   {$endif}
 end;
 
 class function TNetInterlocked.Decrement(var Destination: UInt64): UInt64;
 begin
-  {$ifdef x64}
+  {$if defined(x64) or defined(armx64)}
   result:=InterlockedDecrement64(Destination);
   {$else}
-  {$ifdef USELIBINTERLOCKEDOPS}
+  {$ifdef UseLibInterlockedOps}
   result:=InterlockedDecrement64(@Destination);
   {$else}
-  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$MESSAGE WARNING 'Unsupported processor. Possible alignment exception.'}
+  result:=InterlockedDecrement64(Destination);
   {$endif}
   {$endif}
 end;
@@ -2331,13 +2383,14 @@ end;
 class function TNetInterlocked.Add(var Destination: Int64; const Value: Int64
   ): Int64;
 begin
-  {$ifdef x64}
+  {$if defined(x64) or defined(armx64)}
   result:=InterlockedExchangeAdd64(Destination,Value);
   {$else}
-  {$ifdef USELIBINTERLOCKEDOPS}
+  {$ifdef UseLibInterlockedOps}
   result:=InterlockedExchangeAdd64(@Destination, Value);
   {$else}
-  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$MESSAGE WARNING 'Unsupported processor. Possible alignment exception.'}
+  result:=InterlockedExchangeAdd64(Destination);
   {$endif}
   {$endif}
 end;
@@ -2345,13 +2398,14 @@ end;
 class function TNetInterlocked.Add(var Destination: UInt64; const Value: UInt64
   ): UInt64;
 begin
-  {$ifdef x64}
+  {$if defined(x64) or defined(armx64)}
   result:=InterlockedExchangeAdd64(Destination,Value);
   {$else}
-  {$ifdef USELIBINTERLOCKEDOPS}
+  {$ifdef UseLibInterlockedOps}
   result:=InterlockedExchangeAdd64(@Destination, Value);
   {$else}
-  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$MESSAGE WARNING 'Unsupported processor. Possible alignment exception.'}
+  result:=InterlockedExchangeAdd64(Destination);
   {$endif}
   {$endif}
 end;
@@ -2371,13 +2425,14 @@ end;
 class function TNetInterlocked.Sub(var Destination: Int64; const Value: Int64
   ): Int64;
 begin
-  {$ifdef x64}
+  {$if defined(x64) or defined(armx64)}
   result:=InterlockedExchangeAdd64(Destination,-Value);
   {$else}
-  {$ifdef USELIBINTERLOCKEDOPS}
+  {$ifdef UseLibInterlockedOps}
   result:=InterlockedExchangeAdd64(@Destination,-Value);
   {$else}
-  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$MESSAGE WARNING 'Unsupported processor. Possible alignment exception.'}
+  result:=InterlockedExchangeAdd64(Destination,-Value);
   {$endif}
   {$endif}
 end;
@@ -2385,13 +2440,14 @@ end;
 class function TNetInterlocked.Sub(var Destination: UInt64; const Value: UInt64
   ): UInt64;
 begin
-  {$ifdef x64}
+  {$if defined(x64) or defined(armx64)}
   result:=UInt64(Int64(InterlockedExchangeAdd64(Destination,-Int64(Value))));
   {$else}
-  {$ifdef USELIBINTERLOCKEDOPS}
+  {$ifdef UseLibInterlockedOps}
   result:=UInt64(Int64(InterlockedExchangeAdd64(@Destination,-Int64(Value))));
   {$else}
-  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$MESSAGE WARNING 'Unsupported processor. Possible alignment exception.'}
+  result:=UInt64(Int64(InterlockedExchangeAdd64(Destination,-Int64(Value))));
   {$endif}
   {$endif}
 end;
@@ -2411,13 +2467,14 @@ end;
 class function TNetInterlocked.Exchange(var Destination: Int64;
   const Source: Int64): Int64;
 begin
-  {$ifdef x64}
+  {$if defined(x64) or defined(armx64)}
   result:=InterlockedExchange64(Destination,Source);
   {$else}
-  {$ifdef USELIBINTERLOCKEDOPS}
+  {$ifdef UseLibInterlockedOps}
   result:=InterlockedExchange64(@Destination,Source);
   {$else}
-  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$MESSAGE WARNING 'Unsupported processor. Possible alignment exception.'}
+  result:=InterlockedExchange64(Destination,Source);
   {$endif}
   {$endif}
 end;
@@ -2425,13 +2482,14 @@ end;
 class function TNetInterlocked.Exchange(var Destination: UInt64;
   const Source: UInt64): UInt64;
 begin
-  {$ifdef x64}
+  {$if defined(x64) or defined(armx64)}
   result:=InterlockedExchange64(Destination,Source);
   {$else}
-  {$ifdef USELIBINTERLOCKEDOPS}
+  {$ifdef UseLibInterlockedOps}
   result:=InterlockedExchange64(@Destination,Source);
   {$else}
-  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$MESSAGE WARNING 'Unsupported processor. Possible alignment exception.'}
+  result:=InterlockedExchange64(Destination,Source);
   {$endif}
   {$endif}
 end;
@@ -2469,13 +2527,14 @@ end;
 class function TNetInterlocked.CompareExchange(var Destination: Int64;
   const NewValue, Comperand: Int64): Int64;
 begin
-  {$ifdef x64}
+  {$if defined(x64) or defined(armx64)}
   result:=InterlockedCompareExchange64(Destination,NewValue,Comperand);
   {$else}
-  {$ifdef USELIBINTERLOCKEDOPS}
+  {$ifdef UseLibInterlockedOps}
   result:=InterlockedCompareExchange64(@Destination,NewValue,Comperand);
   {$else}
-  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$MESSAGE WARNING 'Unsupported processor. Possible alignment exception.'}
+  result:=InterlockedCompareExchange64(Destination,NewValue,Comperand);
   {$endif}
   {$endif}
 end;
@@ -2483,13 +2542,14 @@ end;
 class function TNetInterlocked.CompareExchange(var Destination: UInt64;
   const NewValue, Comperand: UInt64): UInt64;
 begin
-  {$ifdef x64}
+  {$if defined(x64) or defined(armx64)}
   result:=InterlockedCompareExchange64(Destination,NewValue,Comperand);
   {$else}
-  {$ifdef USELIBINTERLOCKEDOPS}
+  {$ifdef UseLibInterlockedOps}
   result:=InterlockedCompareExchange64(@Destination,NewValue,Comperand);
   {$else}
-  {$MESSAGE FATAL 'Unsupported processor.'}
+  {$MESSAGE WARNING 'Unsupported processor. Possible alignment exception.'}
+  result:=InterlockedCompareExchange64(Destination,NewValue,Comperand);
   {$endif}
   {$endif}
 end;
@@ -2518,7 +2578,7 @@ end;
 
 class function TNetInterlocked.Read(var Source: Int32): Int32;
 begin
-{$ifdef USELIBINTERLOCKEDOPS}
+{$ifdef UseLibInterlockedOps}
   result := Int32(InterlockedLoad32(@Source));
 {$else}
   result:=InterlockedCompareExchange(Source,0,0);
@@ -2527,7 +2587,7 @@ end;
 
 class function TNetInterlocked.Read(var Source: UInt32): UInt32;
 begin
-{$ifdef USELIBINTERLOCKEDOPS}
+{$ifdef UseLibInterlockedOps}
 result := InterlockedLoad32(@Source);
 {$else}
  result:=UInt32(InterlockedCompareExchange(Int32(Source),0,0));
@@ -2536,7 +2596,7 @@ end;
 
 class function TNetInterlocked.Read(var Source: Int64): Int64;
 begin
-{$ifdef USELIBINTERLOCKEDOPS}
+{$ifdef UseLibInterlockedOps}
   result := Int64(InterlockedLoad64(@Source));
 {$else}
   result:=InterlockedCompareExchange64(Source,0,0);
@@ -2545,7 +2605,7 @@ end;
 
 class function TNetInterlocked.Read(var Source: UInt64): UInt64;
 begin
-{$ifdef USELIBINTERLOCKEDOPS}
+{$ifdef UseLibInterlockedOps}
   result := UInt64(InterlockedLoad64(@Source));
 {$else}
   result:=UInt64(InterlockedCompareExchange64(Int64(Source),0,0));
@@ -2568,7 +2628,7 @@ end;
 
 class function TNetInterlocked.Read(var Source: LongBool): LongBool;
 begin
-{$ifdef USELIBINTERLOCKEDOPS}
+{$ifdef UseLibInterlockedOps}
   result := LongBool(InterlockedLoad32(@Source));
 {$else}
   result:=LongBool(InterlockedCompareExchange(Int32(Source),0,0));
@@ -2578,7 +2638,7 @@ end;
 class function TNetInterlocked.Write(var Destination: Int32;
   const Source: Int32): Int32;
 begin
-{$ifdef USELIBINTERLOCKEDOPS}
+{$ifdef UseLibInterlockedOps}
   result := Int32(InterlockedStore32(@Destination, Uint32(Source)));
 {$else}
   result := Exchange(Destination, Source);
@@ -2588,7 +2648,7 @@ end;
 class function TNetInterlocked.Write(var Destination: UInt32;
   const Source: UInt32): UInt32;
 begin
-{$ifdef USELIBINTERLOCKEDOPS}
+{$ifdef UseLibInterlockedOps}
   result := InterlockedStore32(@Destination, Source);
 {$else}
   result := Exchange(Destination, Source);
@@ -2598,7 +2658,7 @@ end;
 class function TNetInterlocked.Write(var Destination: Int64;
   const Source: Int64): Int64;
 begin
-{$ifdef USELIBINTERLOCKEDOPS}
+{$ifdef UseLibInterlockedOps}
   result := Int64(InterlockedStore64(@Destination, UInt64(Source)));
 {$else}
   result := Exchange(Destination, Source);
@@ -2608,7 +2668,7 @@ end;
 class function TNetInterlocked.Write(var Destination: UInt64;
   const Source: UInt64): UInt64;
 begin
-{$ifdef USELIBINTERLOCKEDOPS}
+{$ifdef UseLibInterlockedOps}
   result := InterlockedStore64(@Destination, Source);
 {$else}
   result := Exchange(Destination, Source);
@@ -2630,7 +2690,7 @@ end;
 class function TNetInterlocked.Write(var Destination: LongBool;
   const Source: LongBool): LongBool;
 begin
-{$ifdef USELIBINTERLOCKEDOPS}
+{$ifdef UseLibInterlockedOps}
   result := LongBool(InterlockedStore32(@Destination, Uint32(Source)));
 {$else}
   result := Exchange(Destination, Source);
